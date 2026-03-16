@@ -1,5 +1,9 @@
 # Zepp Life MCP
 
+[![CI](https://github.com/kubulashvili/zepp-life-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/kubulashvili/zepp-life-mcp/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kubulashvili/zepp-life-mcp)](https://github.com/kubulashvili/zepp-life-mcp/releases)
+[![License](https://img.shields.io/github/license/kubulashvili/zepp-life-mcp)](https://github.com/kubulashvili/zepp-life-mcp/blob/main/LICENSE)
+
 MCP server for Zepp Life data.
 
 This project provides local caching, sync, and MCP tools for Zepp Life data from either exported files or the Zepp cloud session flow.
