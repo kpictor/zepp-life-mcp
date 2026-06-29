@@ -22,6 +22,9 @@ The current implementation targets these data types:
 - heart rate
 - workouts
 - body measurements
+- blood oxygen (SpO2)
+- all-day stress
+- PAI (Personal Activity Intelligence)
 
 Cloud coverage can vary by account, region, and upstream endpoint stability. Export mode is the safest option when you need predictable full-history access.
 
