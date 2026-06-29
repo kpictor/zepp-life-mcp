@@ -13,6 +13,9 @@ from zepp_life_mcp.models import (
     HeartRateSample,
     SleepSession,
     Workout,
+    SpO2Sample,
+    StressSample,
+    PAISample,
 )
 
 
@@ -158,6 +161,63 @@ class Database:
                 )
             """)
 
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS spo2_samples (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_record_id TEXT,
+                    user_id TEXT NOT NULL,
+                    device_id TEXT,
+                    timezone TEXT DEFAULT 'UTC',
+                    collected_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    timestamp TIMESTAMP NOT NULL,
+                    spo2_pct INTEGER NOT NULL,
+                    UNIQUE(user_id, timestamp)
+                )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS stress_samples (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_record_id TEXT,
+                    user_id TEXT NOT NULL,
+                    device_id TEXT,
+                    timezone TEXT DEFAULT 'UTC',
+                    collected_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    timestamp TIMESTAMP NOT NULL,
+                    stress_score INTEGER NOT NULL,
+                    level TEXT NOT NULL,
+                    UNIQUE(user_id, timestamp)
+                )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pai_samples (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_record_id TEXT,
+                    user_id TEXT NOT NULL,
+                    device_id TEXT,
+                    timezone TEXT DEFAULT 'UTC',
+                    collected_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    date TEXT NOT NULL,
+                    pai_score REAL NOT NULL,
+                    total_pai REAL NOT NULL,
+                    UNIQUE(user_id, date)
+                )
+            """)
+
             # Sync state table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS sync_state (
@@ -189,6 +249,19 @@ class Database:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_heart_rate_user_ts
                 ON heart_rate_samples(user_id, timestamp)
+            """)
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_spo2_user_ts
+                ON spo2_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_stress_user_ts
+                ON stress_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pai_user_date
+                ON pai_samples(user_id, date)
             """)
 
             conn.commit()
@@ -406,6 +479,75 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
+
+    def insert_spo2_sample(self, sample: SpO2Sample) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO spo2_samples (
+                    id, provider, source_type, source_record_id, user_id, device_id,
+                    timezone, collected_at, timestamp, spo2_pct
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, timestamp) DO UPDATE SET
+                    spo2_pct = excluded.spo2_pct,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    sample.id, sample.provider, sample.source_type, sample.source_record_id,
+                    sample.user_id, sample.device_id, sample.timezone,
+                    sample.collected_at.isoformat() if sample.collected_at else None,
+                    sample.timestamp.isoformat(), sample.spo2_pct
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def insert_stress_sample(self, sample: StressSample) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO stress_samples (
+                    id, provider, source_type, source_record_id, user_id, device_id,
+                    timezone, collected_at, timestamp, stress_score, level
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, timestamp) DO UPDATE SET
+                    stress_score = excluded.stress_score,
+                    level = excluded.level,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    sample.id, sample.provider, sample.source_type, sample.source_record_id,
+                    sample.user_id, sample.device_id, sample.timezone,
+                    sample.collected_at.isoformat() if sample.collected_at else None,
+                    sample.timestamp.isoformat(), sample.stress_score, sample.level
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def insert_pai_sample(self, sample: PAISample) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO pai_samples (
+                    id, provider, source_type, source_record_id, user_id, device_id,
+                    timezone, collected_at, date, pai_score, total_pai
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, date) DO UPDATE SET
+                    pai_score = excluded.pai_score,
+                    total_pai = excluded.total_pai,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    sample.id, sample.provider, sample.source_type, sample.source_record_id,
+                    sample.user_id, sample.device_id, sample.timezone,
+                    sample.collected_at.isoformat() if sample.collected_at else None,
+                    sample.date, sample.pai_score, sample.total_pai
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
     def update_sync_state(self, data_type: str, last_record_ts: datetime | None = None) -> None:
         """Update sync state for a data type."""
         with self._get_connection() as conn:
@@ -460,7 +602,7 @@ class Database:
                 """
                 SELECT * FROM sleep_sessions
                 WHERE user_id = ?
-                AND date(start_at) >= ? AND date(start_at) <= ?
+                AND date(end_at) >= ? AND date(end_at) <= ?
                 ORDER BY start_at
                 """,
                 (user_id, start_date, end_date),
@@ -518,6 +660,45 @@ class Database:
                 WHERE user_id = ?
                 AND date(timestamp) >= ? AND date(timestamp) <= ?
                 ORDER BY timestamp
+                """,
+                (user_id, start_date, end_date),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+
+    def query_spo2_samples(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM spo2_samples
+                WHERE user_id = ?
+                AND date(timestamp) >= ? AND date(timestamp) <= ?
+                ORDER BY timestamp
+                """,
+                (user_id, start_date, end_date),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def query_stress_samples(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM stress_samples
+                WHERE user_id = ?
+                AND date(timestamp) >= ? AND date(timestamp) <= ?
+                ORDER BY timestamp
+                """,
+                (user_id, start_date, end_date),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def query_pai_samples(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM pai_samples
+                WHERE user_id = ? AND date >= ? AND date <= ?
+                ORDER BY date
                 """,
                 (user_id, start_date, end_date),
             ).fetchall()

@@ -111,6 +111,14 @@ class StressSample(BaseEntity):
     level: Literal["low", "medium", "high"] = Field(description="Stress level category")
 
 
+class PAISample(BaseEntity):
+    """Personal Activity Intelligence (PAI) measurement."""
+
+    date: str = Field(description="Date in YYYY-MM-DD format")
+    pai_score: float = Field(ge=0, description="PAI score earned on this date")
+    total_pai: float = Field(ge=0, description="Total 7-day PAI score")
+
+
 class UserProfile(BaseModel):
     """User profile information."""
 

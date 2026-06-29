@@ -129,8 +129,43 @@ class SyncService:
                 if last_ts is None or sample.timestamp > last_ts:
                     last_ts = sample.timestamp
 
+        elif data_type == "blood_oxygen":
+            if hasattr(self.adapter, "iter_blood_oxygen"):
+                records = self.adapter.iter_blood_oxygen(start_date, end_date)
+                async for sample in self._iterate_records(records):
+                    if self.db.insert_spo2_sample(sample):
+                        added += 1
+                    else:
+                        updated += 1
+                    if last_ts is None or sample.timestamp > last_ts:
+                        last_ts = sample.timestamp
+
+        elif data_type == "stress":
+            if hasattr(self.adapter, "iter_stress"):
+                records = self.adapter.iter_stress(start_date, end_date)
+                async for sample in self._iterate_records(records):
+                    if self.db.insert_stress_sample(sample):
+                        added += 1
+                    else:
+                        updated += 1
+                    if last_ts is None or sample.timestamp > last_ts:
+                        last_ts = sample.timestamp
+
+        elif data_type == "pai":
+            if hasattr(self.adapter, "iter_pai"):
+                records = self.adapter.iter_pai(start_date, end_date)
+                async for sample in self._iterate_records(records):
+                    if self.db.insert_pai_sample(sample):
+                        added += 1
+                    else:
+                        updated += 1
+                    sample_date = datetime.strptime(sample.date, "%Y-%m-%d")
+                    if last_ts is None or sample_date > last_ts:
+                        last_ts = sample_date
+
         else:
             raise ValueError(f"Unknown data type: {data_type}")
+
 
         # Update sync state
         if last_ts:

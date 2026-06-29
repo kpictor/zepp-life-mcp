@@ -269,6 +269,61 @@ async def list_tools() -> list[Tool]:
                 "required": ["start_date", "end_date"],
             },
         ),
+
+        Tool(
+            name="query_spo2",
+            description="Query blood oxygen (SpO2) samples for a date range",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "start_date": {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                    },
+                },
+                "required": ["start_date", "end_date"],
+            },
+        ),
+        Tool(
+            name="query_stress",
+            description="Query stress score samples for a date range",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "start_date": {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                    },
+                },
+                "required": ["start_date", "end_date"],
+            },
+        ),
+        Tool(
+            name="query_pai",
+            description="Query PAI (Personal Activity Intelligence) samples for a date range",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "start_date": {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                    },
+                },
+                "required": ["start_date", "end_date"],
+            },
+        ),
         Tool(
             name="get_data_coverage",
             description="Get data coverage information - which dates have data for each type",
@@ -308,8 +363,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _handle_query_workouts(arguments)
         elif name == "query_heart_rate":
             result = await _handle_query_heart_rate(arguments)
+
         elif name == "query_body_measurements":
             result = await _handle_query_body_measurements(arguments)
+        elif name == "query_spo2":
+            result = await _handle_query_spo2(arguments)
+        elif name == "query_stress":
+            result = await _handle_query_stress(arguments)
+        elif name == "query_pai":
+            result = await _handle_query_pai(arguments)
         elif name == "get_data_coverage":
             result = await _handle_get_data_coverage(arguments)
         else:
@@ -720,6 +782,58 @@ async def _handle_query_body_measurements(arguments: dict) -> dict:
             "error": str(e),
         }
 
+
+
+async def _handle_query_spo2(arguments: dict) -> dict:
+    global query_service
+    if not query_service:
+        return {"status": "error", "error": "Query service not initialized"}
+    try:
+        samples = query_service.get_spo2_samples(
+            start_date=arguments["start_date"],
+            end_date=arguments["end_date"],
+        )
+        return QueryResponse(
+            status="ok",
+            source="cache",
+            data={"samples": samples, "count": len(samples)},
+        ).model_dump()
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+async def _handle_query_stress(arguments: dict) -> dict:
+    global query_service
+    if not query_service:
+        return {"status": "error", "error": "Query service not initialized"}
+    try:
+        samples = query_service.get_stress_samples(
+            start_date=arguments["start_date"],
+            end_date=arguments["end_date"],
+        )
+        return QueryResponse(
+            status="ok",
+            source="cache",
+            data={"samples": samples, "count": len(samples)},
+        ).model_dump()
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+async def _handle_query_pai(arguments: dict) -> dict:
+    global query_service
+    if not query_service:
+        return {"status": "error", "error": "Query service not initialized"}
+    try:
+        samples = query_service.get_pai_samples(
+            start_date=arguments["start_date"],
+            end_date=arguments["end_date"],
+        )
+        return QueryResponse(
+            status="ok",
+            source="cache",
+            data={"samples": samples, "count": len(samples)},
+        ).model_dump()
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 async def _handle_get_data_coverage(arguments: dict) -> dict:
     """Handle get_data_coverage tool."""

@@ -17,6 +17,9 @@ from zepp_life_mcp.models import (
     SleepSession,
     SleepStage,
     Workout,
+    SpO2Sample,
+    StressSample,
+    PAISample,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,7 @@ class CloudSessionAdapter(DataAdapter):
     ZEPP_AUTH_BASE = "https://account.huami.com"
     ZEPP_USER_API = "https://api-user.huami.com"
     ZEPP_WEIGHT_API = "https://api-mifit.zepp.com"
+    ZEPP_EVENTS_API = "https://api-mifit.zepp.com"
 
     def __init__(
         self,
@@ -159,7 +163,7 @@ class CloudSessionAdapter(DataAdapter):
                     "query_type": "summary",
                     "device_type": "android_phone",
                     "userid": self.user_id,
-                    "from_date": "2020-01-01",
+                    "from_date": (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"),
                     "to_date": datetime.now().strftime("%Y-%m-%d"),
                 },
             )
@@ -192,7 +196,7 @@ class CloudSessionAdapter(DataAdapter):
                     "query_type": "detail",
                     "device_type": "android_phone",
                     "userid": self.user_id,
-                    "from_date": "2020-01-01",
+                    "from_date": (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"),
                     "to_date": datetime.now().strftime("%Y-%m-%d"),
                 },
             )
@@ -209,6 +213,21 @@ class CloudSessionAdapter(DataAdapter):
             response = await self._client.get(url)
             if response.status_code == 200:
                 types.append("body_measurements")
+        except Exception:
+            pass
+
+        # Check events
+        try:
+            url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
+            for ev_type, label in [("blood_oxygen", "blood_oxygen"), ("all_day_stress", "stress"), ("PaiHealthInfo", "pai")]:
+                response = await self._client.get(url, params={
+                    "eventType": ev_type, 
+                    "from": int((datetime.now() - timedelta(days=7)).timestamp() * 1000), 
+                    "to": int(datetime.now().timestamp() * 1000),
+                    "limit": 1
+                })
+                if response.status_code == 200 and response.json().get("items"):
+                    types.append(label)
         except Exception:
             pass
 
@@ -540,3 +559,174 @@ class CloudSessionAdapter(DataAdapter):
             await self._client.aclose()
             self._client = None
             self._connected = False
+
+    async def iter_blood_oxygen(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> AsyncIterator[SpO2Sample]:
+        if not self._client or not self.is_connected():
+            return
+            yield
+
+        if not end_date:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start_dt = datetime.strptime(end_date, "%Y-%m-%d") - timedelta(days=30)
+            start_date = start_dt.strftime("%Y-%m-%d")
+
+        try:
+            from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
+            to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
+            
+            url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
+            response = await self._client.get(
+                url,
+                params={
+                    "eventType": "blood_oxygen",
+                    "from": from_ts,
+                    "to": to_ts,
+                    "limit": 1000
+                },
+            )
+
+            if response.status_code == 200:
+                for item in response.json().get("items", []):
+                    ts = item.get("timestamp")
+                    if not ts:
+                        continue
+                    extra = item.get("extra")
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+                            spo2 = extra_data.get("spo2")
+                            if spo2 is not None:
+                                yield SpO2Sample(
+                                    id=f"cloud_spo2_{ts}",
+                                    provider="zepp_life",
+                                    source_type="cloud_session",
+                                    user_id=self.user_id or "unknown",
+                                    timestamp=datetime.fromtimestamp(ts / 1000.0),
+                                    spo2_pct=int(spo2)
+                                )
+                        except json.JSONDecodeError:
+                            pass
+        except Exception as e:
+            logger.error(f"Error fetching blood oxygen: {e}")
+
+    async def iter_stress(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> AsyncIterator[StressSample]:
+        if not self._client or not self.is_connected():
+            return
+            yield
+
+        if not end_date:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start_dt = datetime.strptime(end_date, "%Y-%m-%d") - timedelta(days=30)
+            start_date = start_dt.strftime("%Y-%m-%d")
+
+        try:
+            from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
+            to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
+            
+            url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
+            response = await self._client.get(
+                url,
+                params={
+                    "eventType": "all_day_stress",
+                    "from": from_ts,
+                    "to": to_ts,
+                    "limit": 1000
+                },
+            )
+
+            if response.status_code == 200:
+                for item in response.json().get("items", []):
+                    # Extract detailed points from data field
+                    data_str = item.get("data")
+                    if data_str:
+                        try:
+                            stress_dump = json.loads(data_str)
+                            for point in stress_dump:
+                                ts = point.get("time")
+                                val = point.get("value")
+                                if ts and val:
+                                    level = "low"
+                                    if val >= 80:
+                                        level = "high"
+                                    elif val >= 60:
+                                        level = "medium"
+                                        
+                                    yield StressSample(
+                                        id=f"cloud_stress_{ts}",
+                                        provider="zepp_life",
+                                        source_type="cloud_session",
+                                        user_id=self.user_id or "unknown",
+                                        timestamp=datetime.fromtimestamp(ts / 1000.0) if ts > 10000000000 else datetime.fromtimestamp(ts),
+                                        stress_score=int(val),
+                                        level=level
+                                    )
+                        except json.JSONDecodeError:
+                            pass
+        except Exception as e:
+            logger.error(f"Error fetching stress: {e}")
+
+    async def iter_pai(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> AsyncIterator[PAISample]:
+        if not self._client or not self.is_connected():
+            return
+            yield
+
+        if not end_date:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start_dt = datetime.strptime(end_date, "%Y-%m-%d") - timedelta(days=30)
+            start_date = start_dt.strftime("%Y-%m-%d")
+
+        try:
+            from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
+            to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
+            
+            url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
+            response = await self._client.get(
+                url,
+                params={
+                    "eventType": "PaiHealthInfo",
+                    "from": from_ts,
+                    "to": to_ts,
+                    "limit": 1000
+                },
+            )
+
+            if response.status_code == 200:
+                for item in response.json().get("items", []):
+                    ts = item.get("timestamp")
+                    if not ts:
+                        continue
+                    extra = item.get("extra")
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+                            daily_pai = float(extra_data.get("dailyPai", 0))
+                            total_pai = float(extra_data.get("totalPai", 0))
+                            dt_str = datetime.fromtimestamp(ts / 1000.0).strftime("%Y-%m-%d")
+                            yield PAISample(
+                                id=f"cloud_pai_{ts}",
+                                provider="zepp_life",
+                                source_type="cloud_session",
+                                user_id=self.user_id or "unknown",
+                                date=dt_str,
+                                pai_score=daily_pai,
+                                total_pai=total_pai
+                            )
+                        except json.JSONDecodeError:
+                            pass
+        except Exception as e:
+            logger.error(f"Error fetching PAI: {e}")
