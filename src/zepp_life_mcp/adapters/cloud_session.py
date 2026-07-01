@@ -469,6 +469,22 @@ class CloudSessionAdapter(DataAdapter):
                         continue
 
                 duration_min = int(float(run_time)) // 60 if run_time else 0
+                
+                SPORT_TYPE_MAP = {
+                    "1": "running",
+                    "6": "walking", 
+                    "8": "treadmill",
+                    "9": "cycling",
+                    "10": "indoor_cycling",
+                    "11": "treadmill",
+                    "12": "elliptical",
+                    "13": "rowing",
+                    "14": "pool_swimming",
+                    "16": "freestyle",
+                    "17": "jump_rope"
+                }
+                raw_type = str(item.get("type", "unknown"))
+                mapped_type = SPORT_TYPE_MAP.get(raw_type, raw_type)
 
                 yield Workout(
                     id=f"cloud_{item.get('trackid')}",
@@ -476,7 +492,7 @@ class CloudSessionAdapter(DataAdapter):
                     source_type="cloud_session",
                     user_id=self.user_id or "unknown",
                     workout_id=str(item.get("trackid")),
-                    activity_type=str(item.get("type", "unknown")),
+                    activity_type=mapped_type,
                     start_at=datetime.fromtimestamp(start_ts) if start_ts else datetime.now(),
                     end_at=datetime.fromtimestamp(end_ts) if end_ts else datetime.now(),
                     duration_minutes=duration_min,
