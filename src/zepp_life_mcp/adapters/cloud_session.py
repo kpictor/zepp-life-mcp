@@ -325,7 +325,8 @@ class CloudSessionAdapter(DataAdapter):
 
                 start_ts = sleep_data.get("st")
                 end_ts = sleep_data.get("ed")
-                asleep_minutes = sleep_data.get("dp", 0) + sleep_data.get("lt", 0)
+                rem_mins = sleep_data.get("rs", sleep_data.get("rn", sleep_data.get("rm", 0)))
+                asleep_minutes = sleep_data.get("dp", 0) + sleep_data.get("lt", 0) + rem_mins
 
                 if not start_ts or not end_ts or (end_ts <= start_ts and asleep_minutes <= 0):
                     continue
@@ -338,6 +339,7 @@ class CloudSessionAdapter(DataAdapter):
 
                 stages = []
                 stage_data = sleep_data.get("stage", [])
+                calc_asleep = 0
                 for stage in stage_data:
                     mode = stage.get("mode")
                     if mode == 5:
@@ -352,6 +354,13 @@ class CloudSessionAdapter(DataAdapter):
                     stage_duration = max(0, stage_stop - stage.get("start", 0))
                     if stage_duration:
                         stages.append(SleepStage(stage=stage_type, minutes=stage_duration))
+                        if stage_type != "awake":
+                            calc_asleep += stage_duration
+                
+                if calc_asleep > 0:
+                    asleep_minutes = calc_asleep
+                elif "wk" in sleep_data and duration > 0 and duration >= sleep_data["wk"]:
+                    asleep_minutes = duration - sleep_data["wk"]
 
                 total_duration = max(duration, asleep_minutes)
                 yield SleepSession(
