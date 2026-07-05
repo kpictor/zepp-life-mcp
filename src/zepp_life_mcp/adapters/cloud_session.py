@@ -68,7 +68,7 @@ class CloudSessionAdapter(DataAdapter):
             if user_info:
                 self.user_id = user_info.get("user_id") or self.user_id
                 self._connected = True
-                self._available_types = await self._discover_data_types()
+                self._available_types = ["daily_activity", "sleep", "workouts", "heart_rate", "body_measurements", "blood_oxygen", "stress", "pai"]
                 logger.info(f"Connected to Zepp API as user {self.user_id}")
                 return True
         except Exception as e:
@@ -252,7 +252,7 @@ class CloudSessionAdapter(DataAdapter):
             response = await self._client.get(
                 "/v1/data/band_data.json",
                 params={
-                    "query_type": "summary",
+                    "query_type": "detail",
                     "device_type": "android_phone",
                     "userid": self.user_id,
                     "from_date": start_date,
@@ -270,6 +270,27 @@ class CloudSessionAdapter(DataAdapter):
             for date_str, day_data in self._iter_band_summary_entries(parsed_data):
                 steps_data = day_data.get("stp", {})
                 if steps_data:
+                    # Calculate active minutes
+                    active_mins = None
+                    wk = steps_data.get("wk")
+                    rn = steps_data.get("rn")
+                    if wk is not None or rn is not None:
+                        active_mins = (int(wk) if wk else 0) + (int(rn) if rn else 0)
+
+                    # Set collected_at
+                    from datetime import datetime
+                    now = datetime.now()
+                    today_str = now.strftime("%Y-%m-%d")
+                    if date_str == today_str:
+                        collected_at = now
+                    else:
+                        try:
+                            # Set to end of the day for past days
+                            dt = datetime.strptime(date_str, "%Y-%m-%d")
+                            collected_at = dt.replace(hour=23, minute=59, second=59)
+                        except Exception:
+                            collected_at = None
+
                     yield DailyActivity(
                         id=f"cloud_{date_str}",
                         provider="zepp_life",
@@ -279,6 +300,8 @@ class CloudSessionAdapter(DataAdapter):
                         steps=steps_data.get("ttl", 0),
                         distance_m=steps_data.get("dis", 0),
                         active_kcal=steps_data.get("cal", 0),
+                        active_minutes=active_mins,
+                        collected_at=collected_at,
                     )
 
         except Exception as e:
@@ -346,12 +369,12 @@ class CloudSessionAdapter(DataAdapter):
                         stage_type = "deep"
                     elif mode == 4:
                         stage_type = "light"
-                    elif mode == 3:
+                    elif mode == 8 or mode == 3:
                         stage_type = "rem"
                     else:
                         stage_type = "awake"
                     stage_stop = stage.get("stop", stage.get("end", 0))
-                    stage_duration = max(0, stage_stop - stage.get("start", 0))
+                    stage_duration = max(0, stage_stop - stage.get("start", 0) + 1)
                     if stage_duration:
                         stages.append(SleepStage(stage=stage_type, minutes=stage_duration))
                         if stage_type != "awake":
@@ -625,6 +648,11 @@ class CloudSessionAdapter(DataAdapter):
                         try:
                             extra_data = json.loads(extra)
                             spo2 = extra_data.get("spo2")
+                            if spo2 is not None:
+                                if isinstance(spo2, list) and spo2:
+                                    spo2 = spo2[0]
+                                elif isinstance(spo2, list):
+                                    spo2 = None
                             if spo2 is not None:
                                 yield SpO2Sample(
                                     id=f"cloud_spo2_{ts}",

@@ -290,7 +290,7 @@ class Database:
                     timezone, collected_at, date, steps, distance_m, active_kcal,
                     total_kcal, floors, active_minutes
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(user_id, date, device_id) DO UPDATE SET
+                ON CONFLICT(id) DO UPDATE SET
                     steps = excluded.steps,
                     distance_m = excluded.distance_m,
                     active_kcal = excluded.active_kcal,

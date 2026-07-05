@@ -15,16 +15,16 @@ This project provides local caching, sync, and MCP tools for Zepp Life data from
 
 ## Current data coverage
 
-The current implementation targets these data types:
+The current implementation targets these data types and intelligently processes them to minimize token consumption while maximizing semantic value:
 
-- steps and daily activity
-- sleep
-- heart rate
-- workouts
-- body measurements
-- blood oxygen (SpO2)
-- all-day stress
-- PAI (Personal Activity Intelligence)
+- **daily_activity**: Intraday sync of total steps, distance, active calories, and total active minutes (walking + running time extracted from detailed minute-by-minute arrays).
+- **workouts**: Specific tracked exercise sessions (e.g. walking, running, cycling) including duration, distance, calories, and average heart rate.
+- **sleep**: Sleep sessions including duration, sleep score, and detailed sleep stages (deep, light, REM, awake).
+- **heart_rate**: High-frequency minute-by-minute heart rate samples.
+- **stress**: Minute-by-minute all-day stress measurements.
+- **blood_oxygen**: SpO2 sample tracking.
+- **body_measurements**: Smart scale data including weight and BMI.
+- **pai**: Personal Activity Intelligence (PAI) scores.
 
 Cloud coverage can vary by account, region, and upstream endpoint stability. Export mode is the safest option when you need predictable full-history access.
 

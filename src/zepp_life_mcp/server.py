@@ -346,6 +346,38 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool calls."""
     global config, db, adapter, sync_service, query_service
 
+    if sync_service and (name.startswith("query_") or name == "get_daily_summary"):
+        import asyncio
+        logger.info(f"[DEBUG] call_tool started for {name}, adapter: {adapter}")
+        for _ in range(20):
+            if adapter and adapter.is_connected():
+                logger.info(f"[DEBUG] adapter is connected!")
+                break
+            await asyncio.sleep(0.5)
+        logger.info(f"[DEBUG] finished waiting, adapter is_connected: {adapter.is_connected() if adapter else False}")
+            
+        try:
+            dt_map = {
+                "get_daily_summary": "daily_activity",
+                "query_sleep": "sleep",
+                "query_workouts": "workouts",
+                "query_heart_rate": "heart_rate",
+                "query_body_measurements": "body_measurements",
+                "query_spo2": "blood_oxygen",
+                "query_stress": "stress",
+                "query_pai": "pai"
+            }
+            dt = dt_map.get(name)
+            s_date = arguments.get("date") or arguments.get("start_date")
+            e_date = arguments.get("date") or arguments.get("end_date")
+            if dt and s_date and e_date:
+                if adapter and adapter.is_connected():
+                    await sync_service.sync_data_type(dt, s_date, e_date)
+                else:
+                    logger.warning(f"Auto-sync skipped for {name}: Adapter still not connected")
+        except Exception as e:
+            logger.warning(f"Auto-sync failed for {name}: {e}")
+
     try:
         if name == "get_connection_status":
             result = await _handle_get_connection_status()
@@ -861,6 +893,13 @@ async def _handle_get_data_coverage(arguments: dict) -> dict:
         }
 
 
+async def _connect_adapter_async(adapter):
+    logger.info(f"[DEBUG] _connect_adapter_async starting...")
+    if await adapter.connect():
+        logger.info("Connected to Zepp cloud API")
+    else:
+        logger.warning(f"Failed to connect to Zepp cloud API (is_connected={adapter.is_connected()})")
+
 async def main():
     """Main entry point."""
     global config, db, adapter, sync_service, query_service
@@ -882,10 +921,8 @@ async def main():
         token, user_id = load_token()
         if token:
             adapter = CloudSessionAdapter(token, user_id)
-            if await adapter.connect():
-                logger.info("Connected to Zepp cloud API")
-            else:
-                logger.warning("Failed to connect to Zepp cloud API")
+            import asyncio
+            asyncio.create_task(_connect_adapter_async(adapter))
     # Initialize services
     if adapter:
         sync_service = SyncService(adapter, db)
