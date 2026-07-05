@@ -40,16 +40,24 @@ pip install -e '.[dev]'
 
 ### Cloud session
 
-You need an `apptoken`.
+You need an `apptoken` to access the cloud API. 
+The easiest way is to let the MCP automatically fetch and refresh it for you using your credentials.
 
-Typical flow:
+**Method 1: Automatic Login (Recommended)**
+Create a `.env` file in the project root and add your credentials:
+```env
+ZEPP_USERNAME=your_email@example.com
+ZEPP_PASSWORD=your_password
+```
+The MCP will automatically login, fetch the `apptoken` and `user_id`, and save them to `.env`. It will also automatically refresh the token if it expires in the future.
 
+**Method 2: Manual Token (Legacy)**
 1. Open `https://user.huami.com/privacy2/index.html`
 2. Sign in to the Zepp Life account
 3. Open browser DevTools
 4. Find the `apptoken` cookie
 
-Then configure the server:
+Then configure the server manually:
 
 ```bash
 zepp-life-mcp setup --mode cloud_session --token "<apptoken>" --user-id "<userId>" --region eu

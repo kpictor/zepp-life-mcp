@@ -30,6 +30,8 @@ dependencies = [
     "keyring>=25.0.0",
     "click>=8.0.0",
     "rich>=13.0.0",
+    "huami-token>=0.8.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]

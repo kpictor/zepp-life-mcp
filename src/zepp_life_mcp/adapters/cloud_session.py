@@ -6,8 +6,10 @@ import logging
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 from typing import Any
+import os
 
 import httpx
+from dotenv import set_key, load_dotenv, find_dotenv
 
 from zepp_life_mcp.adapters.base import DataAdapter
 from zepp_life_mcp.models import (
@@ -47,21 +49,55 @@ class CloudSessionAdapter(DataAdapter):
         self._client: httpx.AsyncClient | None = None
         self._available_types: list[str] = []
 
-    async def connect(self) -> bool:
-        if not self.app_token:
-            logger.error("No app_token provided")
+    def _auto_login(self) -> bool:
+        """Attempt to auto-login using credentials from environment."""
+        username = os.environ.get("ZEPP_USERNAME")
+        password = os.environ.get("ZEPP_PASSWORD")
+        if not username or not password:
+            return False
+            
+        try:
+            logger.info("Token missing or expired. Attempting auto-login...")
+            from huami_token.zepp import ZeppSession
+            session = ZeppSession(username=username, password=password)
+            session.login()
+            
+            self.app_token = session.app_token
+            self.user_id = session.user_id
+            
+            # Save to .env if it exists
+            env_file = find_dotenv()
+            if env_file:
+                set_key(env_file, "ZEPP_APP_TOKEN", self.app_token)
+                set_key(env_file, "ZEPP_USER_ID", self.user_id)
+                logger.info(f"Saved new token and user_id to {env_file}")
+            else:
+                logger.warning("No .env file found to save the new token.")
+            return True
+        except Exception as e:
+            logger.error(f"Auto-login failed: {e}")
             return False
 
-        self._client = httpx.AsyncClient(
-            base_url=self.ZEPP_API_BASE,
-            headers={
-                "apptoken": self.app_token,
-                "appPlatform": "web",
-                "appname": "com.xiaomi.hm.health",
-                "Content-Type": "application/json",
-            },
-            timeout=30.0,
-        )
+    async def connect(self) -> bool:
+        load_dotenv()
+        if not self.app_token:
+            if not self._auto_login():
+                logger.error("No app_token provided and auto-login failed")
+                return False
+
+        def _create_client(token: str):
+            return httpx.AsyncClient(
+                base_url=self.ZEPP_API_BASE,
+                headers={
+                    "apptoken": token,
+                    "appPlatform": "web",
+                    "appname": "com.xiaomi.hm.health",
+                    "Content-Type": "application/json",
+                },
+                timeout=30.0,
+            )
+
+        self._client = _create_client(self.app_token)
 
         try:
             user_info = await self._get_user_info()
@@ -72,7 +108,23 @@ class CloudSessionAdapter(DataAdapter):
                 logger.info(f"Connected to Zepp API as user {self.user_id}")
                 return True
         except Exception as e:
-            logger.error(f"Failed to connect: {e}")
+            logger.error(f"Failed to validate token: {e}")
+
+        # If user_info failed (token expired), try auto-login
+        if self._auto_login():
+            if self._client:
+                await self._client.aclose()
+            self._client = _create_client(self.app_token)
+            try:
+                user_info = await self._get_user_info()
+                if user_info:
+                    self.user_id = user_info.get("user_id") or self.user_id
+                    self._connected = True
+                    self._available_types = ["daily_activity", "sleep", "workouts", "heart_rate", "body_measurements", "blood_oxygen", "stress", "pai"]
+                    logger.info(f"Connected to Zepp API as user {self.user_id}")
+                    return True
+            except Exception as e:
+                logger.error(f"Failed to validate token after auto-login: {e}")
 
         return False
 
