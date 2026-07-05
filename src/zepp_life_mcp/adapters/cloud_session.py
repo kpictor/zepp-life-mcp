@@ -3,25 +3,25 @@
 import base64
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 from typing import Any
-import os
 
 import httpx
-from dotenv import set_key, load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv, set_key
 
 from zepp_life_mcp.adapters.base import DataAdapter
 from zepp_life_mcp.models import (
     BodyMeasurement,
     DailyActivity,
     HeartRateSample,
+    PAISample,
     SleepSession,
     SleepStage,
-    Workout,
     SpO2Sample,
     StressSample,
-    PAISample,
+    Workout,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,16 +55,16 @@ class CloudSessionAdapter(DataAdapter):
         password = os.environ.get("ZEPP_PASSWORD")
         if not username or not password:
             return False
-            
+
         try:
             logger.info("Token missing or expired. Attempting auto-login...")
             from huami_token.zepp import ZeppSession
             session = ZeppSession(username=username, password=password)
             session.login()
-            
+
             self.app_token = session.app_token
             self.user_id = session.user_id
-            
+
             # Save to .env if it exists
             env_file = find_dotenv()
             if env_file:
@@ -80,10 +80,9 @@ class CloudSessionAdapter(DataAdapter):
 
     async def connect(self) -> bool:
         load_dotenv()
-        if not self.app_token:
-            if not self._auto_login():
-                logger.error("No app_token provided and auto-login failed")
-                return False
+        if not self.app_token and not self._auto_login():
+            logger.error("No app_token provided and auto-login failed")
+            return False
 
         def _create_client(token: str):
             return httpx.AsyncClient(
@@ -273,8 +272,8 @@ class CloudSessionAdapter(DataAdapter):
             url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
             for ev_type, label in [("blood_oxygen", "blood_oxygen"), ("all_day_stress", "stress"), ("PaiHealthInfo", "pai")]:
                 response = await self._client.get(url, params={
-                    "eventType": ev_type, 
-                    "from": int((datetime.now() - timedelta(days=7)).timestamp() * 1000), 
+                    "eventType": ev_type,
+                    "from": int((datetime.now() - timedelta(days=7)).timestamp() * 1000),
                     "to": int(datetime.now().timestamp() * 1000),
                     "limit": 1
                 })
@@ -330,7 +329,6 @@ class CloudSessionAdapter(DataAdapter):
                         active_mins = (int(wk) if wk else 0) + (int(rn) if rn else 0)
 
                     # Set collected_at
-                    from datetime import datetime
                     now = datetime.now()
                     today_str = now.strftime("%Y-%m-%d")
                     if date_str == today_str:
@@ -431,7 +429,7 @@ class CloudSessionAdapter(DataAdapter):
                         stages.append(SleepStage(stage=stage_type, minutes=stage_duration))
                         if stage_type != "awake":
                             calc_asleep += stage_duration
-                
+
                 if calc_asleep > 0:
                     asleep_minutes = calc_asleep
                 elif "wk" in sleep_data and duration > 0 and duration >= sleep_data["wk"]:
@@ -553,10 +551,10 @@ class CloudSessionAdapter(DataAdapter):
                         continue
 
                 duration_min = int(float(run_time)) // 60 if run_time else 0
-                
-                SPORT_TYPE_MAP = {
+
+                sport_type_map = {
                     "1": "running",
-                    "6": "walking", 
+                    "6": "walking",
                     "8": "treadmill",
                     "9": "cycling",
                     "10": "indoor_cycling",
@@ -565,10 +563,14 @@ class CloudSessionAdapter(DataAdapter):
                     "13": "rowing",
                     "14": "pool_swimming",
                     "16": "freestyle",
-                    "17": "jump_rope"
+                    "17": "jump_rope",
+                    "93": "table_tennis",
+                    "94": "badminton",
+                    "104": "core_training",
+                    "107": "strength_training",
                 }
                 raw_type = str(item.get("type", "unknown"))
-                mapped_type = SPORT_TYPE_MAP.get(raw_type, raw_type)
+                mapped_type = sport_type_map.get(raw_type, raw_type)
 
                 yield Workout(
                     id=f"cloud_{item.get('trackid')}",
@@ -678,7 +680,7 @@ class CloudSessionAdapter(DataAdapter):
         try:
             from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
             to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
-            
+
             url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
             response = await self._client.get(
                 url,
@@ -737,7 +739,7 @@ class CloudSessionAdapter(DataAdapter):
         try:
             from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
             to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
-            
+
             url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
             response = await self._client.get(
                 url,
@@ -765,7 +767,7 @@ class CloudSessionAdapter(DataAdapter):
                                         level = "high"
                                     elif val >= 60:
                                         level = "medium"
-                                        
+
                                     yield StressSample(
                                         id=f"cloud_stress_{ts}",
                                         provider="zepp_life",
@@ -798,7 +800,7 @@ class CloudSessionAdapter(DataAdapter):
         try:
             from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
             to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
-            
+
             url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
             response = await self._client.get(
                 url,
