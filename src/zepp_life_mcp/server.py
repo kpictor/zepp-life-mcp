@@ -325,6 +325,44 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="query_advanced_stats",
+            description="Query advanced WatchSportStatistics like VO2_MAX, SPORT_LOAD, or NEWEST_FIRSTBEAT_DATA",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "stat_type": {
+                        "type": "string",
+                        "enum": ["VO2_MAX", "SPORT_LOAD", "NEWEST_FIRSTBEAT_DATA"],
+                        "description": "The advanced statistic type to query"
+                    },
+                    "start_date": {"type": "string", "description": "Start date (YYYY-MM-DD)"},
+                    "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"}
+                },
+                "required": ["stat_type"]
+            }
+        ),
+        Tool(
+            name="query_events",
+            description="Query general events like exertion, readiness, hrv_sdnn",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "event_type": {
+                        "type": "string",
+                        "enum": ["exertion", "readiness", "hrv_sdnn", "sport"],
+                        "description": "Event type to query"
+                    },
+                    "sub_type": {
+                        "type": "string",
+                        "description": "Optional subType (e.g. algo_result, watch_score)"
+                    },
+                    "start_date": {"type": "string", "description": "Start date (YYYY-MM-DD)"},
+                    "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"}
+                },
+                "required": ["event_type"]
+            }
+        ),
+        Tool(
             name="get_data_coverage",
             description="Get data coverage information - which dates have data for each type",
             inputSchema={
@@ -349,7 +387,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     if sync_service and (name.startswith("query_") or name == "get_daily_summary"):
         import asyncio
         logger.info(f"[DEBUG] call_tool started for {name}, adapter: {adapter}")
-        for _ in range(20):
+        for _ in range(200):
             if adapter and adapter.is_connected():
                 logger.info(f"[DEBUG] adapter is connected!")
                 break
@@ -404,6 +442,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _handle_query_stress(arguments)
         elif name == "query_pai":
             result = await _handle_query_pai(arguments)
+        elif name == "query_advanced_stats":
+            result = await _handle_query_advanced_stats(arguments)
+        elif name == "query_events":
+            result = await _handle_query_events(arguments)
         elif name == "get_data_coverage":
             result = await _handle_get_data_coverage(arguments)
         else:
@@ -865,6 +907,41 @@ async def _handle_query_pai(arguments: dict) -> dict:
             data={"samples": samples, "count": len(samples)},
         ).model_dump()
     except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+async def _handle_query_advanced_stats(arguments: dict) -> dict:
+    global adapter
+    stat_type = arguments["stat_type"]
+    start_date = arguments.get("start_date")
+    end_date = arguments.get("end_date")
+    try:
+        data = await adapter.get_advanced_sport_stats(stat_type, start_date, end_date)
+        return {
+            "status": "success",
+            "data": {
+                stat_type: data
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to query advanced stats: {e}")
+        return {"status": "error", "error": str(e)}
+
+async def _handle_query_events(arguments: dict) -> dict:
+    global adapter
+    event_type = arguments["event_type"]
+    start_date = arguments.get("start_date")
+    end_date = arguments.get("end_date")
+    sub_type = arguments.get("sub_type")
+    try:
+        data = await adapter.get_events(event_type, start_date, end_date, sub_type)
+        return {
+            "status": "success",
+            "data": {
+                event_type: data
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to query events: {e}")
         return {"status": "error", "error": str(e)}
 
 async def _handle_get_data_coverage(arguments: dict) -> dict:

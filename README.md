@@ -1,34 +1,78 @@
 # Zepp Life MCP
 
 [![CI](https://github.com/kubulashvili/zepp-life-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/kubulashvili/zepp-life-mcp/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/kubulashvili/zepp-life-mcp)](https://github.com/kubulashvili/zepp-life-mcp/releases)
-[![License](https://img.shields.io/github/license/kubulashvili/zepp-life-mcp)](https://github.com/kubulashvili/zepp-life-mcp/blob/main/LICENSE)
 
-MCP server for Zepp Life data.
+Zepp Life (原小米运动) 的 Model Context Protocol (MCP) Server。本项目提供本地缓存、数据同步，以及为 AI 提供的标准 MCP 工具，能够直接从 Zepp Cloud 的接口流中拉取极其丰富的健康和运动数据。
 
-This project provides local caching, sync, and MCP tools for Zepp Life data from either exported files or the Zepp cloud session flow.
+---
 
-## Supported sources
+## 目录
 
-- `export_file` for local Zepp exports
-- `cloud_session` for `apptoken`-based cloud access
+- [📊 深度数据接口 Wiki](#-深度数据接口-wiki)
+  - [实时 / 高频数据 (连续监测)](#实时--高频数据-连续监测)
+  - [事件触发数据](#事件触发数据)
+  - [每日汇总数据 (快照)](#每日汇总数据-快照)
+  - [高阶 Firstbeat 分析数据](#高阶-firstbeat-分析数据)
+- [🛠 安装与配置](#-安装与配置)
+- [🚀 运行与命令](#-运行与命令)
+- [🔌 MCP 客户端配置](#-mcp-客户端配置)
+- [⚠️ 常见问题](#-常见问题)
 
-## Current data coverage
+---
 
-The current implementation targets these data types and intelligently processes them to minimize token consumption while maximizing semantic value:
+## 📊 深度数据接口 Wiki
 
-- **daily_activity**: Intraday sync of total steps, distance, active calories, and total active minutes (walking + running time extracted from detailed minute-by-minute arrays).
-- **workouts**: Specific tracked exercise sessions (e.g. walking, running, cycling) including duration, distance, calories, and average heart rate.
-- **sleep**: Sleep sessions including duration, sleep score, and detailed sleep stages (deep, light, REM, awake).
-- **heart_rate**: High-frequency minute-by-minute heart rate samples.
-- **stress**: Minute-by-minute all-day stress measurements.
-- **blood_oxygen**: SpO2 sample tracking.
-- **body_measurements**: Smart scale data including weight and BMI.
-- **pai**: Personal Activity Intelligence (PAI) scores.
+当前的实现经过逆向工程与深度拓展，已经能够覆盖 Zepp 云端 API 所暴露的几乎所有高保真健康数据。以下详细说明了到底有多少数据是可以被读取的、更新频率以及适用场景，作为后续代码开发的接口参考字典。
 
-Cloud coverage can vary by account, region, and upstream endpoint stability. Export mode is the safest option when you need predictable full-history access.
+### 实时 / 高频数据 (连续监测)
 
-## Install
+这些端点提供详细的时间序列数组。适合在白天周期性拉取，以追踪生理状态的实时变化。
+
+| 数据类型 | 英文标识 | 频率 | 核心指标 | 适用场景 |
+|---------|----------|------|---------|----------|
+| **心率** | `heart_rate` | 最高可达每分钟 | `timestamp`, `bpm`, `sample_type` | 实时压力推断、活跃状态追踪、静息心率提取 |
+| **全天压力** | `stress` | 每 5 分钟 (佩戴时) | `timestamp`, `stress_score` (0-100), `level` | 情绪追踪、工作疲劳度评估、"何时该休息"的生理学信号 |
+| **血氧** | `blood_oxygen`| 每天周期性及睡眠期 | `timestamp`, `spo2_pct` | 睡眠呼吸中止指标、高原适应性 |
+
+### 事件触发数据
+
+在完成特定行为或运动后生成的数据集。
+
+| 数据类型 | 英文标识 | 频率 | 核心指标 | 适用场景 |
+|---------|----------|------|---------|----------|
+| **运动记录** | `workouts` | 运动结束后生成 | `activity_type`, `duration_minutes`, `avg_heart_rate_bpm` | 训练日志、卡路里消耗追踪 |
+
+### 每日汇总数据 (快照)
+
+这些数据集每天汇总或生成一次（通常在起床后或午夜）。
+
+| 数据类型 | 英文标识 | 频率 | 核心指标 / 适用场景 |
+|---------|----------|------|--------------------|
+| **每日活动汇总** | `daily_activity` | 每天/累加 | 步数、距离、活动卡路里、活动分钟数 |
+| **睡眠分析** | `sleep` | 睡醒/午休后 | `time_asleep_minutes`, `sleep_score`，以及深浅睡、REM 分期时间，**同时支持白日小睡 (Nap) 识别**。适合晨间报告。 |
+| **身心准备度** | `readiness` | 每天睡醒后 | **隐藏端点**。包含 `rdnsScore` (准备度评分), `sleepHRV` (睡眠心率变异性), `sleepRHR` (睡眠静息心率), `phyScore` (身体评分), `mentScore` (精神评分)。**适合判断今日能量水位**。 |
+| **个人活力指数** | `pai` | 每天 | `dailyPai`, `totalPai`。用于每周心血管负荷追踪。 |
+| **身体数据 (体脂秤)** | `body_measurements`| 手动称重时 | 除了基础的 `weight`, `bmi` 外，最新逆向已支持**全量高阶体脂数据**：`fatRate` (体脂率), `bodyWaterRate` (水分), `muscleRate` (肌肉量), `visceralFat` (内脏脂肪), `boneMass` (骨量), `metabolism` (基础代谢) 等 10+ 项指标！ |
+| **血压** | `bloodPressure` | 测量时 | `sbp` (收缩压), `dbp` (舒张压), `bpm` | 心血管健康监控 |
+| **心电图 (ECG)** | `ECGHealthData` | 测量时 | 详细心电图数据 | 心脏健康、心律不齐筛查 |
+| **女性健康** | `women_health` | 记录时 | `menstrualCycle`, `lastMenstrualTime` | 经期追踪与预测 |
+| **心率变异性 (HRV)** | `HRVRMSSD` | 事件触发 | RMSSD 值 | 神经系统压力与恢复指标 |
+| **设备充电与电量** | `Charge` | 充电时 | 充电事件 (`insight_data`, `real_data`) | 设备电池分析 |
+
+### 高阶 Firstbeat 分析数据
+
+这些经过高度处理的专业训练指标通过分析 HAR 文件发现，并已集成到本系统中。通过 `WatchSportStatistics` 端点或带有特定子类型的 `events` 获取。
+
+| 数据类型 | 英文标识 | 频率 | 核心指标 | 适用场景 |
+|---------|----------|------|---------|----------|
+| **训练负荷与状态** | `phn` | 每天 | `atl` (疲劳度), `ctl` (体能水平), `tsb` (训练状态), `trimp` (训练冲量) | 专业体能状态追踪、防过度训练预警 |
+| **恢复时间** | `exertion` | 运动后/每天 | `recoveryFactor` (恢复时间乘数), `exercisePlan` | 运动后恢复指导 |
+| **最大摄氧量** | `VO2_MAX` | 合格的跑走后 | `vo2_max_run`, `vo2_max_walking` | 长期心血管健康趋势 |
+| **运动负荷** | `SPORT_LOAD` | 每日汇总 | `currnetDayTrainLoad`, `wtlSum` (总训练负荷) | 确保训练负荷在最佳区间内 |
+
+---
+
+## 🛠 安装与配置
 
 ```bash
 python -m venv .venv
@@ -36,51 +80,38 @@ source .venv/bin/activate
 pip install -e '.[dev]'
 ```
 
-## Setup
-
-### Cloud session
-
-You need an `apptoken` to access the cloud API. 
-The easiest way is to let the MCP automatically fetch and refresh it for you using your credentials.
-
-**Method 1: Automatic Login (Recommended)**
-Create a `.env` file in the project root and add your credentials:
+### 自动登录 (推荐)
+在项目根目录创建一个 `.env` 文件并添加你的 Zepp 账号凭证：
 ```env
 ZEPP_USERNAME=your_email@example.com
 ZEPP_PASSWORD=your_password
 ```
-The MCP will automatically login, fetch the `apptoken` and `user_id`, and save them to `.env`. It will also automatically refresh the token if it expires in the future.
+MCP 会自动登录，获取 `apptoken` 和 `user_id`，并将其保存到 `.env` 文件中。它也会在令牌过期时自动刷新。
 
-**Method 2: Manual Token (Legacy)**
-1. Open `https://user.huami.com/privacy2/index.html`
-2. Sign in to the Zepp Life account
-3. Open browser DevTools
-4. Find the `apptoken` cookie
+---
 
-Then configure the server manually:
+## 🚀 运行与命令
 
 ```bash
-zepp-life-mcp setup --mode cloud_session --token "<apptoken>" --user-id "<userId>" --region eu
-zepp-life-mcp doctor
-```
+# 同步数据
+zepp-life-mcp sync --start-date 2026-07-01 --end-date 2026-07-10
 
-### Export file mode
-
-```bash
-zepp-life-mcp setup --mode export_file --export-path ~/Downloads/ZeppExport
-zepp-life-mcp doctor
-```
-
-## Use
-
-```bash
-zepp-life-mcp sync --start-date 2022-01-01 --end-date 2022-12-31
+# 启动 MCP Server
 zepp-life-mcp serve
 ```
 
-## MCP client config
+其他帮助命令：
+```bash
+zepp-life-mcp --help
+zepp-life-mcp setup --help
+zepp-life-mcp doctor
+```
 
-Example `Claude Desktop` config:
+---
+
+## 🔌 MCP 客户端配置
+
+在支持 MCP 的客户端（例如 Claude Desktop）中配置如下：
 
 ```json
 {
@@ -93,48 +124,14 @@ Example `Claude Desktop` config:
 }
 ```
 
-## Example prompts
+---
 
-- `Show my workouts from the last 30 days`
-- `How has my weight changed this year?`
-- `Summarize my sleep for the past week`
-- `Sync my latest Zepp Life data`
+## ⚠️ 常见问题
 
-## Commands
+- `Connection: failed`: 请验证 `.env` 中的 `apptoken` 和 `user_id`。
+- `sync` 返回空数据: Zepp Cloud 可能存在延迟（有时高达 2 小时），手环数据尚未同步到云端。请在 Zepp App 首页下拉强制同步，然后再尝试。
 
-```bash
-zepp-life-mcp --help
-zepp-life-mcp setup --help
-zepp-life-mcp doctor
-zepp-life-mcp sync --help
-zepp-life-mcp serve
-```
+---
 
-## Development
-
-```bash
-pytest
-python -m build
-```
-
-## Troubleshooting
-
-- `Connection: failed`
-  - verify `apptoken`
-  - verify `user_id`
-- `No export data found`
-  - verify the extracted archive path
-  - verify that CSV or JSON export files are present
-- `sync` returns no data
-  - try another date range
-  - try export mode if cloud coverage is incomplete
-
-## Security
-
-- `apptoken` is stored via the system keyring
-- do not commit `.env`, exported health data, or local SQLite files
-- prefer interactive setup over pasting secrets into shell history
-
-## Disclaimer
-
-This is an unofficial project and is not affiliated with Xiaomi or Zepp Health.
+> **免责声明**
+> 本项目是非官方开源项目，与小米 (Xiaomi) 或 Zepp Health 无任何附属关系。

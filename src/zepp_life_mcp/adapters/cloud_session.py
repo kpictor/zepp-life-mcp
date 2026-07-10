@@ -447,8 +447,41 @@ class CloudSessionAdapter(DataAdapter):
                     duration_minutes=total_duration,
                     time_asleep_minutes=asleep_minutes,
                     time_awake_minutes=max(0, total_duration - asleep_minutes),
+                    is_nap=False,
                     stages=stages,
                 )
+
+                # Parse naps
+                odd_stages = sleep_data.get("odd_stage", [])
+                for idx, nap in enumerate(odd_stages):
+                    nap_start_min = nap.get("start")
+                    nap_stop_min = nap.get("stop")
+                    if nap_start_min is None or nap_stop_min is None:
+                        continue
+                    
+                    # Zepp API uses minutes since 00:00 of the PREVIOUS day
+                    base_dt = datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)
+                    nap_start_dt = base_dt + timedelta(minutes=nap_start_min)
+                    nap_end_dt = base_dt + timedelta(minutes=nap_stop_min)
+                    nap_duration = int((nap_end_dt - nap_start_dt).total_seconds() / 60)
+                    
+                    if nap_duration <= 0:
+                        continue
+                        
+                    yield SleepSession(
+                        id=f"cloud_nap_{date_str}_{idx}",
+                        provider="zepp_life",
+                        source_type="cloud_session",
+                        user_id=self.user_id or "unknown",
+                        sleep_id=f"nap_{date_str}_{idx}",
+                        start_at=nap_start_dt,
+                        end_at=nap_end_dt,
+                        duration_minutes=nap_duration,
+                        time_asleep_minutes=nap_duration,
+                        time_awake_minutes=0,
+                        is_nap=True,
+                        stages=[SleepStage(stage="light", minutes=nap_duration)]
+                    )
 
         except Exception as e:
             logger.error(f"Error fetching sleep: {e}")
@@ -837,3 +870,69 @@ class CloudSessionAdapter(DataAdapter):
                             pass
         except Exception as e:
             logger.error(f"Error fetching PAI: {e}")
+
+    async def get_advanced_sport_stats(self, stat_type: str, start_date: str | None = None, end_date: str | None = None) -> list[dict]:
+        import uuid
+        if not self._client or not self.is_connected():
+            return []
+        
+        if not end_date:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+            
+        url = f"{self.ZEPP_EVENTS_API}/v2/watch/users/{self.user_id}/WatchSportStatistics/{stat_type}"
+        params = {}
+        if stat_type in ["VO2_MAX", "SPORT_LOAD"]:
+            params = {
+                "startDay": start_date,
+                "endDay": end_date,
+                "limit": 900,
+                "isReverse": "true"
+            }
+        else:
+            params = {"r": str(uuid.uuid4())}
+            url = f"{self.ZEPP_EVENTS_API}/watch/users/{self.user_id}/WatchSportStatistics/{stat_type}"
+            
+        try:
+            res = await self._client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if "items" in data:
+                    return data["items"]
+                return [data]
+        except Exception as e:
+            logger.error(f"Error fetching {stat_type}: {e}")
+        return []
+
+    async def get_events(self, event_type: str, start_date: str | None = None, end_date: str | None = None, sub_type: str | None = None) -> list[dict]:
+        import uuid
+        if not self._client or not self.is_connected():
+            return []
+        
+        if not end_date:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+            
+        from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
+        to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
+        
+        url = f"{self.ZEPP_EVENTS_API}/v2/users/me/events"
+        params = {
+            "eventType": event_type,
+            "from": from_ts,
+            "to": to_ts,
+            "limit": 200,
+            "r": str(uuid.uuid4())
+        }
+        if sub_type:
+            params["subType"] = sub_type
+            
+        try:
+            res = await self._client.get(url, params=params)
+            if res.status_code == 200:
+                return res.json().get("items", [])
+        except Exception as e:
+            logger.error(f"Error fetching events {event_type}: {e}")
+        return []
