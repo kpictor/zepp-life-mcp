@@ -84,6 +84,9 @@ class BodyMeasurement(BaseEntity):
     visceral_fat_score: int | None = Field(None, ge=0, description="Visceral fat level")
     basal_metabolism_kcal: int | None = Field(None, ge=0, description="BMR in kcal")
     metabolic_age: int | None = Field(None, ge=0, description="Metabolic age")
+    protein_pct: float | None = Field(None, ge=0, le=100, description="Protein percentage")
+    skeletal_muscle_kg: float | None = Field(None, ge=0, description="Skeletal muscle mass")
+    body_balance_score: int | None = Field(None, ge=0, le=100, description="Body balance score")
 
 
 class HeartRateSample(BaseEntity):
@@ -117,6 +120,41 @@ class PAISample(BaseEntity):
     date: str = Field(description="Date in YYYY-MM-DD format")
     pai_score: float = Field(ge=0, description="PAI score earned on this date")
     total_pai: float = Field(ge=0, description="Total 7-day PAI score")
+
+
+class RespiratoryRateSample(BaseEntity):
+    """Respiratory rate measurement (e.g. during sleep)."""
+
+    timestamp: datetime = Field(description="Measurement time")
+    rate: float = Field(ge=0, description="Breaths per minute")
+
+
+class SportRoute(BaseEntity):
+    """GPS Route associated with a workout."""
+
+    route_id: str = Field(description="Unique route file ID")
+    workout_id: str | None = Field(None, description="Associated workout ID if any")
+    lon_max: float | None = Field(None, description="Max longitude")
+    lon_min: float | None = Field(None, description="Min longitude")
+    lat_max: float | None = Field(None, description="Max latitude")
+    lat_min: float | None = Field(None, description="Min latitude")
+    elevation_gain: float | None = Field(None, description="Elevation gain")
+    elevation_loss: float | None = Field(None, description="Elevation loss")
+    elevation_max: float | None = Field(None, description="Max elevation")
+    elevation_min: float | None = Field(None, description="Min elevation")
+    source: str | None = Field(None, description="Source (e.g. komoot)")
+    raw_json: str | None = Field(None, description="Raw JSON data of the route")
+
+
+class TrainingPlan(BaseEntity):
+    """Structured training plan / Zepp Coach schedule."""
+
+    plan_id: str = Field(description="Unique plan ID")
+    start_date: str | None = Field(None, description="Start date")
+    end_date: str | None = Field(None, description="End date")
+    title: str | None = Field(None, description="Plan title")
+    description: str | None = Field(None, description="Plan description")
+    raw_json: str | None = Field(None, description="Raw JSON data of the plan schedules")
 
 
 class UserProfile(BaseModel):

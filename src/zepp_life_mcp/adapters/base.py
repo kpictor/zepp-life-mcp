@@ -10,6 +10,9 @@ from zepp_life_mcp.models import (
     HeartRateSample,
     SleepSession,
     Workout,
+    RespiratoryRateSample,
+    SportRoute,
+    TrainingPlan,
 )
 
 
@@ -83,4 +86,29 @@ class DataAdapter(ABC):
     @abstractmethod
     def get_available_data_types(self) -> list[str]:
         """Get list of available data types."""
+        pass
+
+    @abstractmethod
+    def iter_respiratory_rate(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> Iterator[RespiratoryRateSample] | AsyncIterator[RespiratoryRateSample]:
+        """Iterate over respiratory rate records."""
+        pass
+
+    @abstractmethod
+    def iter_sport_routes(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> Iterator[SportRoute] | AsyncIterator[SportRoute]:
+        """Iterate over sport route records."""
+        pass
+
+    @abstractmethod
+    def iter_training_plans(
+        self,
+    ) -> Iterator[TrainingPlan] | AsyncIterator[TrainingPlan]:
+        """Iterate over training plans."""
         pass

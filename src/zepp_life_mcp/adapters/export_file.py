@@ -12,7 +12,10 @@ from zepp_life_mcp.models import (
     BodyMeasurement,
     DailyActivity,
     HeartRateSample,
+    RespiratoryRateSample,
     SleepSession,
+    SportRoute,
+    TrainingPlan,
     Workout,
 )
 
@@ -826,3 +829,20 @@ class ExportFileAdapter(DataAdapter):
         if start_date and date < start_date:
             return False
         return not (end_date and date > end_date)
+
+
+    def iter_respiratory_rate(
+        self, start_date: str | None = None, end_date: str | None = None
+    ) -> Iterator[RespiratoryRateSample]:
+        # Not yet implemented for CSV exports
+        return iter([])
+
+    def iter_sport_routes(
+        self, start_date: str | None = None, end_date: str | None = None
+    ) -> Iterator[SportRoute]:
+        # Not yet implemented for CSV exports
+        return iter([])
+
+    def iter_training_plans(self) -> Iterator[TrainingPlan]:
+        # Not yet implemented for CSV exports
+        return iter([])

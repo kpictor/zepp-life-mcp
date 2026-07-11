@@ -16,6 +16,9 @@ from zepp_life_mcp.models import (
     SpO2Sample,
     StressSample,
     PAISample,
+    RespiratoryRateSample,
+    SportRoute,
+    TrainingPlan,
 )
 
 
@@ -138,6 +141,9 @@ class Database:
                     visceral_fat_score INTEGER,
                     basal_metabolism_kcal INTEGER,
                     metabolic_age INTEGER,
+                    protein_pct REAL,
+                    skeletal_muscle_kg REAL,
+                    body_balance_score INTEGER,
                     UNIQUE(user_id, timestamp, device_id)
                 )
             """)
@@ -218,6 +224,75 @@ class Database:
                 )
             """)
 
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS respiratory_rate_samples (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_record_id TEXT,
+                    user_id TEXT NOT NULL,
+                    device_id TEXT,
+                    timezone TEXT DEFAULT 'UTC',
+                    collected_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    timestamp TIMESTAMP NOT NULL,
+                    rate REAL NOT NULL,
+                    UNIQUE(user_id, timestamp)
+                )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS sport_routes (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_record_id TEXT,
+                    user_id TEXT NOT NULL,
+                    device_id TEXT,
+                    timezone TEXT DEFAULT 'UTC',
+                    collected_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    route_id TEXT NOT NULL,
+                    workout_id TEXT,
+                    lon_max REAL,
+                    lon_min REAL,
+                    lat_max REAL,
+                    lat_min REAL,
+                    elevation_gain REAL,
+                    elevation_loss REAL,
+                    elevation_max REAL,
+                    elevation_min REAL,
+                    source TEXT,
+                    raw_json TEXT,
+                    UNIQUE(user_id, route_id)
+                )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS training_plans (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_record_id TEXT,
+                    user_id TEXT NOT NULL,
+                    device_id TEXT,
+                    timezone TEXT DEFAULT 'UTC',
+                    collected_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    plan_id TEXT NOT NULL,
+                    start_date TEXT,
+                    end_date TEXT,
+                    title TEXT,
+                    description TEXT,
+                    raw_json TEXT,
+                    UNIQUE(user_id, plan_id)
+                )
+            """)
+
             # Sync state table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS sync_state (
@@ -262,6 +337,20 @@ class Database:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_pai_user_date
                 ON pai_samples(user_id, date)
+            """)
+
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
             """)
 
             conn.commit()
@@ -318,6 +407,20 @@ class Database:
                     activity.active_minutes,
                 ),
             )
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
+            """)
+
             conn.commit()
             return cursor.rowcount > 0
 
@@ -359,6 +462,20 @@ class Database:
                     json.dumps([s.model_dump() for s in sleep.stages]),
                 ),
             )
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
+            """)
+
             conn.commit()
             return cursor.rowcount > 0
 
@@ -404,6 +521,20 @@ class Database:
                     workout.total_steps,
                 ),
             )
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
+            """)
+
             conn.commit()
             return cursor.rowcount > 0
 
@@ -416,14 +547,17 @@ class Database:
                     id, provider, source_type, source_record_id, user_id, device_id,
                     timezone, collected_at, timestamp, weight_kg, bmi, body_fat_pct,
                     muscle_mass_kg, water_pct, bone_mass_kg, visceral_fat_score,
-                    basal_metabolism_kcal, metabolic_age
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    basal_metabolism_kcal, metabolic_age, protein_pct, skeletal_muscle_kg, body_balance_score
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, timestamp, device_id) DO UPDATE SET
                     weight_kg = excluded.weight_kg,
                     bmi = excluded.bmi,
                     body_fat_pct = excluded.body_fat_pct,
                     muscle_mass_kg = excluded.muscle_mass_kg,
                     water_pct = excluded.water_pct,
+                    protein_pct = excluded.protein_pct,
+                    skeletal_muscle_kg = excluded.skeletal_muscle_kg,
+                    body_balance_score = excluded.body_balance_score,
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
@@ -445,8 +579,25 @@ class Database:
                     measurement.visceral_fat_score,
                     measurement.basal_metabolism_kcal,
                     measurement.metabolic_age,
+                    measurement.protein_pct,
+                    measurement.skeletal_muscle_kg,
+                    measurement.body_balance_score,
                 ),
             )
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
+            """)
+
             conn.commit()
             return cursor.rowcount > 0
 
@@ -476,6 +627,20 @@ class Database:
                     sample.sample_type,
                 ),
             )
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
+            """)
+
             conn.commit()
             return cursor.rowcount > 0
 
@@ -499,6 +664,20 @@ class Database:
                     sample.timestamp.isoformat(), sample.spo2_pct
                 ),
             )
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
+            """)
+
             conn.commit()
             return cursor.rowcount > 0
 
@@ -522,6 +701,20 @@ class Database:
                     sample.timestamp.isoformat(), sample.stress_score, sample.level
                 ),
             )
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
+            """)
+
             conn.commit()
             return cursor.rowcount > 0
 
@@ -545,6 +738,98 @@ class Database:
                     sample.date, sample.pai_score, sample.total_pai
                 ),
             )
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
+            """)
+
+            conn.commit()
+            return cursor.rowcount > 0
+
+
+    def insert_respiratory_rate_sample(self, sample: RespiratoryRateSample) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO respiratory_rate_samples (
+                    id, provider, source_type, source_record_id, user_id, device_id,
+                    timezone, collected_at, timestamp, rate
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, timestamp) DO UPDATE SET
+                    rate = excluded.rate,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    sample.id, sample.provider, sample.source_type, sample.source_record_id,
+                    sample.user_id, sample.device_id, sample.timezone,
+                    sample.collected_at.isoformat() if sample.collected_at else None,
+                    sample.timestamp.isoformat(), sample.rate
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def insert_sport_route(self, route: SportRoute) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO sport_routes (
+                    id, provider, source_type, source_record_id, user_id, device_id,
+                    timezone, collected_at, route_id, workout_id, lon_max, lon_min,
+                    lat_max, lat_min, elevation_gain, elevation_loss, elevation_max,
+                    elevation_min, source, raw_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, route_id) DO UPDATE SET
+                    workout_id = excluded.workout_id,
+                    raw_json = excluded.raw_json,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    route.id, route.provider, route.source_type, route.source_record_id,
+                    route.user_id, route.device_id, route.timezone,
+                    route.collected_at.isoformat() if route.collected_at else None,
+                    route.route_id, route.workout_id, route.lon_max, route.lon_min,
+                    route.lat_max, route.lat_min, route.elevation_gain, route.elevation_loss,
+                    route.elevation_max, route.elevation_min, route.source, route.raw_json
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def insert_training_plan(self, plan: TrainingPlan) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO training_plans (
+                    id, provider, source_type, source_record_id, user_id, device_id,
+                    timezone, collected_at, plan_id, start_date, end_date, title,
+                    description, raw_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, plan_id) DO UPDATE SET
+                    start_date = excluded.start_date,
+                    end_date = excluded.end_date,
+                    title = excluded.title,
+                    description = excluded.description,
+                    raw_json = excluded.raw_json,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    plan.id, plan.provider, plan.source_type, plan.source_record_id,
+                    plan.user_id, plan.device_id, plan.timezone,
+                    plan.collected_at.isoformat() if plan.collected_at else None,
+                    plan.plan_id, plan.start_date, plan.end_date, plan.title,
+                    plan.description, plan.raw_json
+                ),
+            )
             conn.commit()
             return cursor.rowcount > 0
 
@@ -561,6 +846,20 @@ class Database:
                 """,
                 (data_type, last_record_ts.isoformat() if last_record_ts else None),
             )
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
+                ON respiratory_rate_samples(user_id, timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sport_routes_user_route
+                ON sport_routes(user_id, route_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_training_plans_user_plan
+                ON training_plans(user_id, plan_id)
+            """)
+
             conn.commit()
 
     def get_sync_state(self, data_type: str) -> dict[str, Any] | None:
@@ -701,6 +1000,45 @@ class Database:
                 ORDER BY date
                 """,
                 (user_id, start_date, end_date),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+
+    def query_respiratory_rate_samples(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM respiratory_rate_samples
+                WHERE user_id = ?
+                AND date(timestamp) >= ? AND date(timestamp) <= ?
+                ORDER BY timestamp
+                """,
+                (user_id, start_date, end_date),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def query_sport_routes(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM sport_routes
+                WHERE user_id = ?
+                AND date(created_at) >= ? AND date(created_at) <= ?
+                ORDER BY created_at
+                """,
+                (user_id, start_date, end_date),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def query_training_plans(self, user_id: str) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM training_plans
+                WHERE user_id = ?
+                ORDER BY start_date DESC
+                """,
+                (user_id,),
             ).fetchall()
             return [dict(row) for row in rows]
 

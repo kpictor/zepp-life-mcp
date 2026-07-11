@@ -3,7 +3,7 @@
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from mcp.server import Server
@@ -376,6 +376,48 @@ async def list_tools() -> list[Tool]:
                 },
             },
         ),
+        Tool(
+            name="get_respiratory_rate",
+            description="Get continuous respiratory rate data during sleep or rest.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "start_date": {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD), defaults to 7 days ago"
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD), defaults to today"
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="get_sport_routes",
+            description="Get GPS sport routes (e.g., from Komoot or watch).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "start_date": {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD), defaults to 30 days ago"
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD), defaults to today"
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="get_training_plans",
+            description="Get structured training plans or Zepp Coach schedules.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
     ]
 
 
@@ -389,11 +431,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         logger.info(f"[DEBUG] call_tool started for {name}, adapter: {adapter}")
         for _ in range(200):
             if adapter and adapter.is_connected():
-                logger.info(f"[DEBUG] adapter is connected!")
+                logger.info("[DEBUG] adapter is connected!")
                 break
             await asyncio.sleep(0.5)
         logger.info(f"[DEBUG] finished waiting, adapter is_connected: {adapter.is_connected() if adapter else False}")
-            
+
         try:
             dt_map = {
                 "get_daily_summary": "daily_activity",
@@ -403,7 +445,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "query_body_measurements": "body_measurements",
                 "query_spo2": "blood_oxygen",
                 "query_stress": "stress",
-                "query_pai": "pai"
+                "query_pai": "pai",
+                "get_respiratory_rate": "respiratory_rate",
+                "get_sport_routes": "sport_routes",
+                "get_training_plans": "training_plans"
             }
             dt = dt_map.get(name)
             s_date = arguments.get("date") or arguments.get("start_date")
@@ -448,6 +493,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _handle_query_events(arguments)
         elif name == "get_data_coverage":
             result = await _handle_get_data_coverage(arguments)
+        elif name == "get_respiratory_rate":
+            result = await _handle_get_respiratory_rate(arguments)
+        elif name == "get_sport_routes":
+            result = await _handle_get_sport_routes(arguments)
+        elif name == "get_training_plans":
+            result = await _handle_get_training_plans(arguments)
         else:
             return [
                 TextContent(
@@ -970,8 +1021,80 @@ async def _handle_get_data_coverage(arguments: dict) -> dict:
         }
 
 
+async def _handle_get_respiratory_rate(arguments: dict[str, Any]) -> dict[str, Any]:
+    try:
+        user_id = query_service.get_user_id()
+        if not user_id:
+            return {"status": "error", "error": "No user configured or logged in."}
+
+        start_date = arguments.get("start_date")
+        end_date = arguments.get("end_date")
+
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else datetime.now()
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else end_dt - timedelta(days=7)
+
+        start_str = start_dt.strftime("%Y-%m-%d")
+        end_str = end_dt.strftime("%Y-%m-%d")
+
+        records = query_service.db.query_respiratory_rate_samples(user_id, start_str, end_str)
+
+        return {
+            "status": "ok",
+            "source": query_service.connection_status["mode"],
+            "count": len(records),
+            "data": records
+        }
+    except Exception as e:
+        logger.exception("Failed to get respiratory rate")
+        return {"status": "error", "error": str(e)}
+
+async def _handle_get_sport_routes(arguments: dict[str, Any]) -> dict[str, Any]:
+    try:
+        user_id = query_service.get_user_id()
+        if not user_id:
+            return {"status": "error", "error": "No user configured or logged in."}
+
+        start_date = arguments.get("start_date")
+        end_date = arguments.get("end_date")
+
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else datetime.now()
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else end_dt - timedelta(days=30)
+
+        start_str = start_dt.strftime("%Y-%m-%d")
+        end_str = end_dt.strftime("%Y-%m-%d")
+
+        records = query_service.db.query_sport_routes(user_id, start_str, end_str)
+
+        return {
+            "status": "ok",
+            "source": query_service.connection_status["mode"],
+            "count": len(records),
+            "data": records
+        }
+    except Exception as e:
+        logger.exception("Failed to get sport routes")
+        return {"status": "error", "error": str(e)}
+
+async def _handle_get_training_plans(arguments: dict[str, Any]) -> dict[str, Any]:
+    try:
+        user_id = query_service.get_user_id()
+        if not user_id:
+            return {"status": "error", "error": "No user configured or logged in."}
+
+        records = query_service.db.query_training_plans(user_id)
+
+        return {
+            "status": "ok",
+            "source": query_service.connection_status["mode"],
+            "count": len(records),
+            "data": records
+        }
+    except Exception as e:
+        logger.exception("Failed to get training plans")
+        return {"status": "error", "error": str(e)}
+
 async def _connect_adapter_async(adapter):
-    logger.info(f"[DEBUG] _connect_adapter_async starting...")
+    logger.info("[DEBUG] _connect_adapter_async starting...")
     if await adapter.connect():
         logger.info("Connected to Zepp cloud API")
     else:
