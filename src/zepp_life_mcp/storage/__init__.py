@@ -11,14 +11,14 @@ from zepp_life_mcp.models import (
     BodyMeasurement,
     DailyActivity,
     HeartRateSample,
-    SleepSession,
-    Workout,
-    SpO2Sample,
-    StressSample,
     PAISample,
     RespiratoryRateSample,
+    SleepSession,
+    SpO2Sample,
     SportRoute,
+    StressSample,
     TrainingPlan,
+    Workout,
 )
 
 
@@ -167,7 +167,6 @@ class Database:
                 )
             """)
 
-
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS spo2_samples (
                     id TEXT PRIMARY KEY,
@@ -223,7 +222,6 @@ class Database:
                     UNIQUE(user_id, date)
                 )
             """)
-
 
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS respiratory_rate_samples (
@@ -338,7 +336,6 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_pai_user_date
                 ON pai_samples(user_id, date)
             """)
-
 
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_respiratory_user_ts
@@ -549,7 +546,7 @@ class Database:
                     muscle_mass_kg, water_pct, bone_mass_kg, visceral_fat_score,
                     basal_metabolism_kcal, metabolic_age, protein_pct, skeletal_muscle_kg, body_balance_score
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(user_id, timestamp, device_id) DO UPDATE SET
+                ON CONFLICT(id) DO UPDATE SET
                     weight_kg = excluded.weight_kg,
                     bmi = excluded.bmi,
                     body_fat_pct = excluded.body_fat_pct,
@@ -644,7 +641,6 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
-
     def insert_spo2_sample(self, sample: SpO2Sample) -> bool:
         with self._get_connection() as conn:
             cursor = conn.execute(
@@ -658,10 +654,16 @@ class Database:
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
-                    sample.id, sample.provider, sample.source_type, sample.source_record_id,
-                    sample.user_id, sample.device_id, sample.timezone,
+                    sample.id,
+                    sample.provider,
+                    sample.source_type,
+                    sample.source_record_id,
+                    sample.user_id,
+                    sample.device_id,
+                    sample.timezone,
                     sample.collected_at.isoformat() if sample.collected_at else None,
-                    sample.timestamp.isoformat(), sample.spo2_pct
+                    sample.timestamp.isoformat(),
+                    sample.spo2_pct,
                 ),
             )
 
@@ -695,10 +697,17 @@ class Database:
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
-                    sample.id, sample.provider, sample.source_type, sample.source_record_id,
-                    sample.user_id, sample.device_id, sample.timezone,
+                    sample.id,
+                    sample.provider,
+                    sample.source_type,
+                    sample.source_record_id,
+                    sample.user_id,
+                    sample.device_id,
+                    sample.timezone,
                     sample.collected_at.isoformat() if sample.collected_at else None,
-                    sample.timestamp.isoformat(), sample.stress_score, sample.level
+                    sample.timestamp.isoformat(),
+                    sample.stress_score,
+                    sample.level,
                 ),
             )
 
@@ -732,10 +741,17 @@ class Database:
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
-                    sample.id, sample.provider, sample.source_type, sample.source_record_id,
-                    sample.user_id, sample.device_id, sample.timezone,
+                    sample.id,
+                    sample.provider,
+                    sample.source_type,
+                    sample.source_record_id,
+                    sample.user_id,
+                    sample.device_id,
+                    sample.timezone,
                     sample.collected_at.isoformat() if sample.collected_at else None,
-                    sample.date, sample.pai_score, sample.total_pai
+                    sample.date,
+                    sample.pai_score,
+                    sample.total_pai,
                 ),
             )
 
@@ -755,7 +771,6 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
-
     def insert_respiratory_rate_sample(self, sample: RespiratoryRateSample) -> bool:
         with self._get_connection() as conn:
             cursor = conn.execute(
@@ -769,10 +784,16 @@ class Database:
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
-                    sample.id, sample.provider, sample.source_type, sample.source_record_id,
-                    sample.user_id, sample.device_id, sample.timezone,
+                    sample.id,
+                    sample.provider,
+                    sample.source_type,
+                    sample.source_record_id,
+                    sample.user_id,
+                    sample.device_id,
+                    sample.timezone,
                     sample.collected_at.isoformat() if sample.collected_at else None,
-                    sample.timestamp.isoformat(), sample.rate
+                    sample.timestamp.isoformat(),
+                    sample.rate,
                 ),
             )
             conn.commit()
@@ -794,12 +815,26 @@ class Database:
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
-                    route.id, route.provider, route.source_type, route.source_record_id,
-                    route.user_id, route.device_id, route.timezone,
+                    route.id,
+                    route.provider,
+                    route.source_type,
+                    route.source_record_id,
+                    route.user_id,
+                    route.device_id,
+                    route.timezone,
                     route.collected_at.isoformat() if route.collected_at else None,
-                    route.route_id, route.workout_id, route.lon_max, route.lon_min,
-                    route.lat_max, route.lat_min, route.elevation_gain, route.elevation_loss,
-                    route.elevation_max, route.elevation_min, route.source, route.raw_json
+                    route.route_id,
+                    route.workout_id,
+                    route.lon_max,
+                    route.lon_min,
+                    route.lat_max,
+                    route.lat_min,
+                    route.elevation_gain,
+                    route.elevation_loss,
+                    route.elevation_max,
+                    route.elevation_min,
+                    route.source,
+                    route.raw_json,
                 ),
             )
             conn.commit()
@@ -823,11 +858,20 @@ class Database:
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
-                    plan.id, plan.provider, plan.source_type, plan.source_record_id,
-                    plan.user_id, plan.device_id, plan.timezone,
+                    plan.id,
+                    plan.provider,
+                    plan.source_type,
+                    plan.source_record_id,
+                    plan.user_id,
+                    plan.device_id,
+                    plan.timezone,
                     plan.collected_at.isoformat() if plan.collected_at else None,
-                    plan.plan_id, plan.start_date, plan.end_date, plan.title,
-                    plan.description, plan.raw_json
+                    plan.plan_id,
+                    plan.start_date,
+                    plan.end_date,
+                    plan.title,
+                    plan.description,
+                    plan.raw_json,
                 ),
             )
             conn.commit()
@@ -964,8 +1008,9 @@ class Database:
             ).fetchall()
             return [dict(row) for row in rows]
 
-
-    def query_spo2_samples(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+    def query_spo2_samples(
+        self, user_id: str, start_date: str, end_date: str
+    ) -> list[dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
                 """
@@ -978,7 +1023,9 @@ class Database:
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def query_stress_samples(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+    def query_stress_samples(
+        self, user_id: str, start_date: str, end_date: str
+    ) -> list[dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
                 """
@@ -991,7 +1038,9 @@ class Database:
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def query_pai_samples(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+    def query_pai_samples(
+        self, user_id: str, start_date: str, end_date: str
+    ) -> list[dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
                 """
@@ -1003,8 +1052,9 @@ class Database:
             ).fetchall()
             return [dict(row) for row in rows]
 
-
-    def query_respiratory_rate_samples(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+    def query_respiratory_rate_samples(
+        self, user_id: str, start_date: str, end_date: str
+    ) -> list[dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
                 """
@@ -1017,7 +1067,9 @@ class Database:
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def query_sport_routes(self, user_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+    def query_sport_routes(
+        self, user_id: str, start_date: str, end_date: str
+    ) -> list[dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
                 """

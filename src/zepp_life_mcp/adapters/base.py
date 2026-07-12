@@ -8,11 +8,11 @@ from zepp_life_mcp.models import (
     BodyMeasurement,
     DailyActivity,
     HeartRateSample,
-    SleepSession,
-    Workout,
     RespiratoryRateSample,
+    SleepSession,
     SportRoute,
     TrainingPlan,
+    Workout,
 )
 
 

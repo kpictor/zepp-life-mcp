@@ -269,7 +269,6 @@ async def list_tools() -> list[Tool]:
                 "required": ["start_date", "end_date"],
             },
         ),
-
         Tool(
             name="query_spo2",
             description="Query blood oxygen (SpO2) samples for a date range",
@@ -333,13 +332,13 @@ async def list_tools() -> list[Tool]:
                     "stat_type": {
                         "type": "string",
                         "enum": ["VO2_MAX", "SPORT_LOAD", "NEWEST_FIRSTBEAT_DATA"],
-                        "description": "The advanced statistic type to query"
+                        "description": "The advanced statistic type to query",
                     },
                     "start_date": {"type": "string", "description": "Start date (YYYY-MM-DD)"},
-                    "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"}
+                    "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"},
                 },
-                "required": ["stat_type"]
-            }
+                "required": ["stat_type"],
+            },
         ),
         Tool(
             name="query_events",
@@ -350,17 +349,17 @@ async def list_tools() -> list[Tool]:
                     "event_type": {
                         "type": "string",
                         "enum": ["exertion", "readiness", "hrv_sdnn", "sport"],
-                        "description": "Event type to query"
+                        "description": "Event type to query",
                     },
                     "sub_type": {
                         "type": "string",
-                        "description": "Optional subType (e.g. algo_result, watch_score)"
+                        "description": "Optional subType (e.g. algo_result, watch_score)",
                     },
                     "start_date": {"type": "string", "description": "Start date (YYYY-MM-DD)"},
-                    "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"}
+                    "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"},
                 },
-                "required": ["event_type"]
-            }
+                "required": ["event_type"],
+            },
         ),
         Tool(
             name="get_data_coverage",
@@ -384,14 +383,14 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "start_date": {
                         "type": "string",
-                        "description": "Start date (YYYY-MM-DD), defaults to 7 days ago"
+                        "description": "Start date (YYYY-MM-DD), defaults to 7 days ago",
                     },
                     "end_date": {
                         "type": "string",
-                        "description": "End date (YYYY-MM-DD), defaults to today"
-                    }
-                }
-            }
+                        "description": "End date (YYYY-MM-DD), defaults to today",
+                    },
+                },
+            },
         ),
         Tool(
             name="get_sport_routes",
@@ -401,22 +400,19 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "start_date": {
                         "type": "string",
-                        "description": "Start date (YYYY-MM-DD), defaults to 30 days ago"
+                        "description": "Start date (YYYY-MM-DD), defaults to 30 days ago",
                     },
                     "end_date": {
                         "type": "string",
-                        "description": "End date (YYYY-MM-DD), defaults to today"
-                    }
-                }
-            }
+                        "description": "End date (YYYY-MM-DD), defaults to today",
+                    },
+                },
+            },
         ),
         Tool(
             name="get_training_plans",
             description="Get structured training plans or Zepp Coach schedules.",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
+            inputSchema={"type": "object", "properties": {}},
         ),
     ]
 
@@ -428,13 +424,16 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     if sync_service and (name.startswith("query_") or name == "get_daily_summary"):
         import asyncio
+
         logger.info(f"[DEBUG] call_tool started for {name}, adapter: {adapter}")
         for _ in range(200):
             if adapter and adapter.is_connected():
                 logger.info("[DEBUG] adapter is connected!")
                 break
             await asyncio.sleep(0.5)
-        logger.info(f"[DEBUG] finished waiting, adapter is_connected: {adapter.is_connected() if adapter else False}")
+        logger.info(
+            f"[DEBUG] finished waiting, adapter is_connected: {adapter.is_connected() if adapter else False}"
+        )
 
         try:
             dt_map = {
@@ -448,7 +447,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "query_pai": "pai",
                 "get_respiratory_rate": "respiratory_rate",
                 "get_sport_routes": "sport_routes",
-                "get_training_plans": "training_plans"
+                "get_training_plans": "training_plans",
             }
             dt = dt_map.get(name)
             s_date = arguments.get("date") or arguments.get("start_date")
@@ -908,7 +907,6 @@ async def _handle_query_body_measurements(arguments: dict) -> dict:
         }
 
 
-
 async def _handle_query_spo2(arguments: dict) -> dict:
     global query_service
     if not query_service:
@@ -925,6 +923,7 @@ async def _handle_query_spo2(arguments: dict) -> dict:
         ).model_dump()
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
 
 async def _handle_query_stress(arguments: dict) -> dict:
     global query_service
@@ -943,6 +942,7 @@ async def _handle_query_stress(arguments: dict) -> dict:
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
+
 async def _handle_query_pai(arguments: dict) -> dict:
     global query_service
     if not query_service:
@@ -960,6 +960,7 @@ async def _handle_query_pai(arguments: dict) -> dict:
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
+
 async def _handle_query_advanced_stats(arguments: dict) -> dict:
     global adapter
     stat_type = arguments["stat_type"]
@@ -967,15 +968,11 @@ async def _handle_query_advanced_stats(arguments: dict) -> dict:
     end_date = arguments.get("end_date")
     try:
         data = await adapter.get_advanced_sport_stats(stat_type, start_date, end_date)
-        return {
-            "status": "success",
-            "data": {
-                stat_type: data
-            }
-        }
+        return {"status": "success", "data": {stat_type: data}}
     except Exception as e:
         logger.error(f"Failed to query advanced stats: {e}")
         return {"status": "error", "error": str(e)}
+
 
 async def _handle_query_events(arguments: dict) -> dict:
     global adapter
@@ -985,15 +982,11 @@ async def _handle_query_events(arguments: dict) -> dict:
     sub_type = arguments.get("sub_type")
     try:
         data = await adapter.get_events(event_type, start_date, end_date, sub_type)
-        return {
-            "status": "success",
-            "data": {
-                event_type: data
-            }
-        }
+        return {"status": "success", "data": {event_type: data}}
     except Exception as e:
         logger.error(f"Failed to query events: {e}")
         return {"status": "error", "error": str(e)}
+
 
 async def _handle_get_data_coverage(arguments: dict) -> dict:
     """Handle get_data_coverage tool."""
@@ -1031,7 +1024,9 @@ async def _handle_get_respiratory_rate(arguments: dict[str, Any]) -> dict[str, A
         end_date = arguments.get("end_date")
 
         end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else datetime.now()
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else end_dt - timedelta(days=7)
+        start_dt = (
+            datetime.strptime(start_date, "%Y-%m-%d") if start_date else end_dt - timedelta(days=7)
+        )
 
         start_str = start_dt.strftime("%Y-%m-%d")
         end_str = end_dt.strftime("%Y-%m-%d")
@@ -1042,11 +1037,12 @@ async def _handle_get_respiratory_rate(arguments: dict[str, Any]) -> dict[str, A
             "status": "ok",
             "source": query_service.connection_status["mode"],
             "count": len(records),
-            "data": records
+            "data": records,
         }
     except Exception as e:
         logger.exception("Failed to get respiratory rate")
         return {"status": "error", "error": str(e)}
+
 
 async def _handle_get_sport_routes(arguments: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -1058,7 +1054,9 @@ async def _handle_get_sport_routes(arguments: dict[str, Any]) -> dict[str, Any]:
         end_date = arguments.get("end_date")
 
         end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else datetime.now()
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else end_dt - timedelta(days=30)
+        start_dt = (
+            datetime.strptime(start_date, "%Y-%m-%d") if start_date else end_dt - timedelta(days=30)
+        )
 
         start_str = start_dt.strftime("%Y-%m-%d")
         end_str = end_dt.strftime("%Y-%m-%d")
@@ -1069,11 +1067,12 @@ async def _handle_get_sport_routes(arguments: dict[str, Any]) -> dict[str, Any]:
             "status": "ok",
             "source": query_service.connection_status["mode"],
             "count": len(records),
-            "data": records
+            "data": records,
         }
     except Exception as e:
         logger.exception("Failed to get sport routes")
         return {"status": "error", "error": str(e)}
+
 
 async def _handle_get_training_plans(arguments: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -1087,18 +1086,22 @@ async def _handle_get_training_plans(arguments: dict[str, Any]) -> dict[str, Any
             "status": "ok",
             "source": query_service.connection_status["mode"],
             "count": len(records),
-            "data": records
+            "data": records,
         }
     except Exception as e:
         logger.exception("Failed to get training plans")
         return {"status": "error", "error": str(e)}
+
 
 async def _connect_adapter_async(adapter):
     logger.info("[DEBUG] _connect_adapter_async starting...")
     if await adapter.connect():
         logger.info("Connected to Zepp cloud API")
     else:
-        logger.warning(f"Failed to connect to Zepp cloud API (is_connected={adapter.is_connected()})")
+        logger.warning(
+            f"Failed to connect to Zepp cloud API (is_connected={adapter.is_connected()})"
+        )
+
 
 async def main():
     """Main entry point."""
@@ -1122,6 +1125,7 @@ async def main():
         if token:
             adapter = CloudSessionAdapter(token, user_id)
             import asyncio
+
             asyncio.create_task(_connect_adapter_async(adapter))
     # Initialize services
     if adapter:

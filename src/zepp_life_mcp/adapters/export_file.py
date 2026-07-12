@@ -830,7 +830,6 @@ class ExportFileAdapter(DataAdapter):
             return False
         return not (end_date and date > end_date)
 
-
     def iter_respiratory_rate(
         self, start_date: str | None = None, end_date: str | None = None
     ) -> Iterator[RespiratoryRateSample]:

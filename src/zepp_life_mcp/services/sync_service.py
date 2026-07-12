@@ -199,7 +199,6 @@ class SyncService:
         else:
             raise ValueError(f"Unknown data type: {data_type}")
 
-
         # Update sync state
         if last_ts:
             self.db.update_sync_state(data_type, last_ts)

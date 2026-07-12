@@ -17,14 +17,14 @@ from zepp_life_mcp.models import (
     DailyActivity,
     HeartRateSample,
     PAISample,
+    RespiratoryRateSample,
     SleepSession,
     SleepStage,
     SpO2Sample,
-    StressSample,
-    Workout,
-    RespiratoryRateSample,
     SportRoute,
+    StressSample,
     TrainingPlan,
+    Workout,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,7 @@ class CloudSessionAdapter(DataAdapter):
         try:
             logger.info("Token missing or expired. Attempting auto-login...")
             from huami_token.zepp import ZeppSession
+
             session = ZeppSession(username=username, password=password)
             session.login()
 
@@ -106,7 +107,19 @@ class CloudSessionAdapter(DataAdapter):
             if user_info:
                 self.user_id = user_info.get("user_id") or self.user_id
                 self._connected = True
-                self._available_types = ["daily_activity", "sleep", "workouts", "heart_rate", "body_measurements", "blood_oxygen", "stress", "pai", "respiratory_rate", "sport_routes", "training_plans"]
+                self._available_types = [
+                    "daily_activity",
+                    "sleep",
+                    "workouts",
+                    "heart_rate",
+                    "body_measurements",
+                    "blood_oxygen",
+                    "stress",
+                    "pai",
+                    "respiratory_rate",
+                    "sport_routes",
+                    "training_plans",
+                ]
                 logger.info(f"Connected to Zepp API as user {self.user_id}")
                 return True
         except Exception as e:
@@ -122,7 +135,19 @@ class CloudSessionAdapter(DataAdapter):
                 if user_info:
                     self.user_id = user_info.get("user_id") or self.user_id
                     self._connected = True
-                    self._available_types = ["daily_activity", "sleep", "workouts", "heart_rate", "body_measurements", "blood_oxygen", "stress", "pai", "respiratory_rate", "sport_routes", "training_plans"]
+                    self._available_types = [
+                        "daily_activity",
+                        "sleep",
+                        "workouts",
+                        "heart_rate",
+                        "body_measurements",
+                        "blood_oxygen",
+                        "stress",
+                        "pai",
+                        "respiratory_rate",
+                        "sport_routes",
+                        "training_plans",
+                    ]
                     logger.info(f"Connected to Zepp API as user {self.user_id}")
                     return True
             except Exception as e:
@@ -273,13 +298,20 @@ class CloudSessionAdapter(DataAdapter):
         # Check events
         try:
             url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
-            for ev_type, label in [("blood_oxygen", "blood_oxygen"), ("all_day_stress", "stress"), ("PaiHealthInfo", "pai")]:
-                response = await self._client.get(url, params={
-                    "eventType": ev_type,
-                    "from": int((datetime.now() - timedelta(days=7)).timestamp() * 1000),
-                    "to": int(datetime.now().timestamp() * 1000),
-                    "limit": 1
-                })
+            for ev_type, label in [
+                ("blood_oxygen", "blood_oxygen"),
+                ("all_day_stress", "stress"),
+                ("PaiHealthInfo", "pai"),
+            ]:
+                response = await self._client.get(
+                    url,
+                    params={
+                        "eventType": ev_type,
+                        "from": int((datetime.now() - timedelta(days=7)).timestamp() * 1000),
+                        "to": int(datetime.now().timestamp() * 1000),
+                        "limit": 1,
+                    },
+                )
                 if response.status_code == 200 and response.json().get("items"):
                     types.append(label)
         except Exception:
@@ -461,16 +493,16 @@ class CloudSessionAdapter(DataAdapter):
                     nap_stop_min = nap.get("stop")
                     if nap_start_min is None or nap_stop_min is None:
                         continue
-                    
+
                     # Zepp API uses minutes since 00:00 of the PREVIOUS day
                     base_dt = datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)
                     nap_start_dt = base_dt + timedelta(minutes=nap_start_min)
                     nap_end_dt = base_dt + timedelta(minutes=nap_stop_min)
                     nap_duration = int((nap_end_dt - nap_start_dt).total_seconds() / 60)
-                    
+
                     if nap_duration <= 0:
                         continue
-                        
+
                     yield SleepSession(
                         id=f"cloud_nap_{date_str}_{idx}",
                         provider="zepp_life",
@@ -483,7 +515,7 @@ class CloudSessionAdapter(DataAdapter):
                         time_asleep_minutes=nap_duration,
                         time_awake_minutes=0,
                         is_nap=True,
-                        stages=[SleepStage(stage="light", minutes=nap_duration)]
+                        stages=[SleepStage(stage="light", minutes=nap_duration)],
                     )
 
         except Exception as e:
@@ -720,17 +752,17 @@ class CloudSessionAdapter(DataAdapter):
 
         try:
             from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
-            to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
+            to_ts = int(
+                datetime.strptime(end_date, "%Y-%m-%d")
+                .replace(hour=23, minute=59, second=59)
+                .timestamp()
+                * 1000
+            )
 
             url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
             response = await self._client.get(
                 url,
-                params={
-                    "eventType": "blood_oxygen",
-                    "from": from_ts,
-                    "to": to_ts,
-                    "limit": 1000
-                },
+                params={"eventType": "blood_oxygen", "from": from_ts, "to": to_ts, "limit": 1000},
             )
 
             if response.status_code == 200:
@@ -755,7 +787,7 @@ class CloudSessionAdapter(DataAdapter):
                                     source_type="cloud_session",
                                     user_id=self.user_id or "unknown",
                                     timestamp=datetime.fromtimestamp(ts / 1000.0),
-                                    spo2_pct=int(spo2)
+                                    spo2_pct=int(spo2),
                                 )
                         except json.JSONDecodeError:
                             pass
@@ -779,17 +811,17 @@ class CloudSessionAdapter(DataAdapter):
 
         try:
             from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
-            to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
+            to_ts = int(
+                datetime.strptime(end_date, "%Y-%m-%d")
+                .replace(hour=23, minute=59, second=59)
+                .timestamp()
+                * 1000
+            )
 
             url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
             response = await self._client.get(
                 url,
-                params={
-                    "eventType": "all_day_stress",
-                    "from": from_ts,
-                    "to": to_ts,
-                    "limit": 1000
-                },
+                params={"eventType": "all_day_stress", "from": from_ts, "to": to_ts, "limit": 1000},
             )
 
             if response.status_code == 200:
@@ -814,9 +846,11 @@ class CloudSessionAdapter(DataAdapter):
                                         provider="zepp_life",
                                         source_type="cloud_session",
                                         user_id=self.user_id or "unknown",
-                                        timestamp=datetime.fromtimestamp(ts / 1000.0) if ts > 10000000000 else datetime.fromtimestamp(ts),
+                                        timestamp=datetime.fromtimestamp(ts / 1000.0)
+                                        if ts > 10000000000
+                                        else datetime.fromtimestamp(ts),
                                         stress_score=int(val),
-                                        level=level
+                                        level=level,
                                     )
                         except json.JSONDecodeError:
                             pass
@@ -840,17 +874,17 @@ class CloudSessionAdapter(DataAdapter):
 
         try:
             from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
-            to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
+            to_ts = int(
+                datetime.strptime(end_date, "%Y-%m-%d")
+                .replace(hour=23, minute=59, second=59)
+                .timestamp()
+                * 1000
+            )
 
             url = f"{self.ZEPP_EVENTS_API}/users/{self.user_id}/events"
             response = await self._client.get(
                 url,
-                params={
-                    "eventType": "PaiHealthInfo",
-                    "from": from_ts,
-                    "to": to_ts,
-                    "limit": 1000
-                },
+                params={"eventType": "PaiHealthInfo", "from": from_ts, "to": to_ts, "limit": 1000},
             )
 
             if response.status_code == 200:
@@ -872,36 +906,36 @@ class CloudSessionAdapter(DataAdapter):
                                 user_id=self.user_id or "unknown",
                                 date=dt_str,
                                 pai_score=daily_pai,
-                                total_pai=total_pai
+                                total_pai=total_pai,
                             )
                         except json.JSONDecodeError:
                             pass
         except Exception as e:
             logger.error(f"Error fetching PAI: {e}")
 
-    async def get_advanced_sport_stats(self, stat_type: str, start_date: str | None = None, end_date: str | None = None) -> list[dict]:
+    async def get_advanced_sport_stats(
+        self, stat_type: str, start_date: str | None = None, end_date: str | None = None
+    ) -> list[dict]:
         import uuid
+
         if not self._client or not self.is_connected():
             return []
-        
+
         if not end_date:
             end_date = datetime.now().strftime("%Y-%m-%d")
         if not start_date:
             start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-            
-        url = f"{self.ZEPP_EVENTS_API}/v2/watch/users/{self.user_id}/WatchSportStatistics/{stat_type}"
+
+        url = (
+            f"{self.ZEPP_EVENTS_API}/v2/watch/users/{self.user_id}/WatchSportStatistics/{stat_type}"
+        )
         params = {}
         if stat_type in ["VO2_MAX", "SPORT_LOAD"]:
-            params = {
-                "startDay": start_date,
-                "endDay": end_date,
-                "limit": 900,
-                "isReverse": "true"
-            }
+            params = {"startDay": start_date, "endDay": end_date, "limit": 900, "isReverse": "true"}
         else:
             params = {"r": str(uuid.uuid4())}
             url = f"{self.ZEPP_EVENTS_API}/watch/users/{self.user_id}/WatchSportStatistics/{stat_type}"
-            
+
         try:
             res = await self._client.get(url, params=params)
             if res.status_code == 200:
@@ -913,30 +947,42 @@ class CloudSessionAdapter(DataAdapter):
             logger.error(f"Error fetching {stat_type}: {e}")
         return []
 
-    async def get_events(self, event_type: str, start_date: str | None = None, end_date: str | None = None, sub_type: str | None = None) -> list[dict]:
+    async def get_events(
+        self,
+        event_type: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        sub_type: str | None = None,
+    ) -> list[dict]:
         import uuid
+
         if not self._client or not self.is_connected():
             return []
-        
+
         if not end_date:
             end_date = datetime.now().strftime("%Y-%m-%d")
         if not start_date:
             start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-            
+
         from_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
-        to_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp() * 1000)
-        
+        to_ts = int(
+            datetime.strptime(end_date, "%Y-%m-%d")
+            .replace(hour=23, minute=59, second=59)
+            .timestamp()
+            * 1000
+        )
+
         url = f"{self.ZEPP_EVENTS_API}/v2/users/me/events"
         params = {
             "eventType": event_type,
             "from": from_ts,
             "to": to_ts,
             "limit": 200,
-            "r": str(uuid.uuid4())
+            "r": str(uuid.uuid4()),
         }
         if sub_type:
             params["subType"] = sub_type
-            
+
         try:
             res = await self._client.get(url, params=params)
             if res.status_code == 200:
@@ -944,7 +990,6 @@ class CloudSessionAdapter(DataAdapter):
         except Exception as e:
             logger.error(f"Error fetching events {event_type}: {e}")
         return []
-
 
     async def iter_respiratory_rate(
         self, start_date: str | None = None, end_date: str | None = None
@@ -956,14 +1001,14 @@ class CloudSessionAdapter(DataAdapter):
         for event in events:
             if "value" not in event or "measurements" not in event["value"]:
                 continue
-            
+
             # Since the respiratory data is encoded, we store a representation or decoded value
             # For this implementation we will just store a record with rate=0 as a placeholder
             # if we can't fully decode the Base64/EBERER pattern immediately, or we store the count of measurements
             encoded_data = event["value"]["measurements"]
             # Estimate rate based on length or just store 0 for now as a proof of concept
             timestamp = datetime.fromtimestamp(int(event["timestamp"]) / 1000)
-            
+
             yield RespiratoryRateSample(
                 id=f"resp_{self.user_id}_{event['timestamp']}",
                 provider="zepp_life",
@@ -972,7 +1017,7 @@ class CloudSessionAdapter(DataAdapter):
                 user_id=self.user_id,
                 device_id=event.get("deviceId"),
                 timestamp=timestamp,
-                rate=len(encoded_data) / 100.0, # Placeholder
+                rate=len(encoded_data) / 100.0,  # Placeholder
                 collected_at=timestamp,
             )
 
@@ -986,11 +1031,11 @@ class CloudSessionAdapter(DataAdapter):
         for event in events:
             if "value" not in event:
                 continue
-            
+
             val = event["value"]
             timestamp = datetime.fromtimestamp(int(event["timestamp"]) / 1000)
             route_id = str(val.get("routeFileId", event["timestamp"]))
-            
+
             yield SportRoute(
                 id=f"route_{self.user_id}_{route_id}",
                 provider="zepp_life",
@@ -999,7 +1044,7 @@ class CloudSessionAdapter(DataAdapter):
                 user_id=self.user_id,
                 device_id=event.get("deviceId"),
                 route_id=route_id,
-                workout_id=None, # Need to correlate later if needed
+                workout_id=None,  # Need to correlate later if needed
                 lon_max=val.get("lonMax"),
                 lon_min=val.get("lonMin"),
                 lat_max=val.get("latMax"),
